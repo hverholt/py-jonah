@@ -1,0 +1,19 @@
+# ADCP dashboard
+numpy
+pandas
+xarray
+matplotlib
+requests
+OWSLib
+pyproj
+Pillow
+CairoSVG
+PyQt6
+
+# NetCDF files and pandas.read_html support
+netCDF4
+lxml
+
+# Telemetry processing from the separate GitHub repository
+# Requires an installable package (pyproject.toml or setup.py) in that repository.
+git+https://github.com/hverholt/adcp-py-toolbox.git

@@ -6,9 +6,10 @@ from matplotlib.image import BboxImage
 from owslib.wms import WebMapService
 from pyproj import Transformer
 from io import BytesIO, StringIO
-import base64
+from pathlib import Path
 from matplotlib.transforms import Bbox, TransformedBbox
 from PIL import Image
+import base64
 import os
 import argparse
 import sys
@@ -27,22 +28,25 @@ matplotlib.use("QtAgg")
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-
-sys.path.append(os.path.abspath("../toolbox"))
-from source import telemetry2netcdf
+from adcp_toolbox import telemetry2netcdf
 
 
 # ============================================================
 # Configuration
 # ============================================================
 
+# Project root
+ROOT = Path(__file__).resolve().parent
+
 # Input
 INPUT_DIR = r"C:\Users\Nortek1000\Documents\Nortek\Deployment\Online"
-TXT_FILE = os.path.abspath("txt/latest.txt")
-NC_FILE = os.path.abspath("netcdf/latest.nc")
+
+# Intermediate and processed data
+TXT_FILE = str(ROOT / "data" / "interim" / "latest.txt")
+NC_FILE = str(ROOT / "data" / "processed" / "latest.nc")
 
 # Output
-EXPORT_DIR = os.path.abspath("dashboard_preview")  # Default: do not publish
+EXPORT_DIR = str(ROOT / "output" / "preview")
 EXPORT_DPI = 150
 FONT_FAMILY = "DejaVu Sans"
 FONT_FALLBACK = "Arial"
@@ -50,7 +54,7 @@ FONT_FALLBACK = "Arial"
 # Attribution
 MAINTAINER_NAME = "Sindri Bernholt"
 MAINTAINER_EMAIL = "sindri@rostrannsoknir.is"
-LOGO_SVG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rost-logo-icelandic-white.svg")
+LOGO_SVG = str(ROOT / "assets" / "logos" / "rost-logo-icelandic-white.svg")
 LOGO_POSITION = (0.67, 0.975)
 LOGO_SIZE = 0.16
 
@@ -1434,12 +1438,12 @@ def main():
     parser.add_argument(
         "--publish",
         action="store_true",
-        help="Update the public website in dashboard/ (default: dashboard_preview/)",
+        help="Export to output/live/ instead of output/preview/",
     )
     args = parser.parse_args()
 
     global EXPORT_DIR
-    EXPORT_DIR = os.path.abspath("dashboard" if args.publish else "dashboard_preview")
+    EXPORT_DIR = str(ROOT / "output" / ("live" if args.publish else "preview"))
     print(f"Dashboard export directory: {EXPORT_DIR}")
 
     plt.show(block=False)

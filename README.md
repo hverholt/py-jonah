@@ -1,48 +1,64 @@
-# Hvalfjörður ADCP Monitoring
+# py-jonah
 
-Live monitoring and visualization of ocean currents measured by a **Nortek Signature1000 ADCP** at the **Miðsandur pier, Hvalfjörður, Iceland**, for **Röst sjávarrannsóknasetur**.
+Python application for generating and continuously updating a live dashboard of acoustic Doppler current profiler (ADCP) measurements. It combines incoming telemetry, converts the data to NetCDF using [adcp-py-toolbox](https://github.com/hverholt/adcp-py-toolbox), and visualizes horizontal current velocities at selected depths below the sea surface.
 
-The project processes ADCP telemetry, converts it to NetCDF, and displays current velocity at selected depths in a continuously updating dashboard. The dashboard includes time series, current-direction vectors, water depth, and nearby wind observations.
+The dashboard displays velocity time series, current direction and speed, pressure-derived water depth, and nearby wind observations. It produces a live Matplotlib display and standalone HTML, SVG, and PNG outputs that can be served through a web browser.
 
-## Dashboard
+Currently used to monitor a **Nortek Signature1000 ADCP** at **Miðsandur pier, Hvalfjörður, Iceland**, for **Röst Marine Research Center** (https://www.rostrannsoknir.is).
 
-Run the dashboard locally without updating the public website:
+## Installation
+
+Install Python and Git, then install the dependencies:
+
+```cmd
+python -m pip install -r requirements.txt
+```
+
+For `adcp-py-toolbox` installation, see its [GitHub repository](https://github.com/hverholt/adcp-py-toolbox).
+
+The application uses Matplotlib's Qt backend and requires a graphical desktop environment.
+
+## Usage
+
+Run the dashboard in preview mode:
 
 ```cmd
 python plot_adcp_dashboard.py
 ```
 
-To publish updated dashboard files to the live website:
+Publish updated dashboard files:
 
 ```cmd
 python plot_adcp_dashboard.py --publish
 ```
 
-Without `--publish`, output is written to `dashboard_preview/`. With `--publish`, output is written to `dashboard/`. Both modes export `latest.html`, `latest.svg`, and `latest.png`.
+Preview and published files are written to `output/preview/` and `output/live/`, respectively. Each contains `latest.html`, `latest.svg`, and `latest.png`.
 
-## Website
+## Web access
 
-From the project directory, start a local server:
+Serve the published dashboard locally:
 
 ```cmd
-python -m http.server 8000 --bind 127.0.0.1 --directory dashboard
+python -m http.server 8000 --bind 127.0.0.1 --directory output/live
 ```
 
-To share the website publicly using Tailscale Funnel:
+Optionally expose the server using Tailscale Funnel:
 
 ```cmd
 tailscale funnel --bg 8000
 ```
 
-View the published dashboard at the Funnel address followed by `/latest.html`. The dashboard and local server must remain running for live access.
+Open `/latest.html` at the server address. The dashboard automatically refreshes its outputs while running.
 
 ## Configuration
 
-Edit the configuration section near the top of `plot_adcp_dashboard.py` to set telemetry paths, measurement depths, refresh intervals, and display options. The plotting script uses the telemetry processing tools in `source/telemetry2netcdf.py` from the companion `py-adcp-toolbox` repository.
+Configure the telemetry input directory, target depths, refresh intervals, and display settings near the top of `plot_adcp_dashboard.py`.
 
-The dashboard requires Python and its imported scientific/plotting packages, as well as access to the incoming Nortek telemetry files.
+## Collaboration
+
+Developed in collaboration with the **University of Iceland** and **Röst Marine Research Center** (https://www.rostrannsoknir.is).
 
 ## Maintainer
 
 Developed and maintained by **Sindri Bernholt**  
-Email: [sindri@rostrannsoknir.is](mailto:sindri@rostrannsoknir.is)
+[sindri@rostrannsoknir.is](mailto:sindri@rostrannsoknir.is)

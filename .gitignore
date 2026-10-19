@@ -1,3 +1,5 @@
-client_secrets.json
-**/client_secrets*.json
+__pycache__/
+*.py[cod]
 .ipynb_checkpoints/
+.pytest_cache/
+.venv/
