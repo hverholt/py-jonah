@@ -60,8 +60,8 @@ LOGO_SIZE = 0.16
 
 
 # Data settings
-TARGET_DEPTHS = (2, 5)  # Metres below sea surface
-DBAR_PER_METER = 1.01
+TARGET_DEPTHS = (1, 1.5, 2, 3, 4, 5)  # metres below sea surface
+DBAR_PER_METER = 1.0065
 
 # Live plot settings
 STALE_AFTER_SECONDS = 180
@@ -69,24 +69,24 @@ HISTORY_HOURS = 24
 REFRESH_SECONDS = 120
 WEB_POLL_SECONDS = 15
 
-# Primary station: Olíudreifing (M&T)
+# Primary station (MOGT)
 MOGT_URL = "https://vedur.mogt.is/harbor/index.php"
 MOGT_STATION_ID = 1035
 MOGT_STATION_NAME = "ODR Hvalfjörður"
 
-# Backup station: Þyrill (IMO)
-VEDUR_URL = "https://api.vedur.is/weather"
+# Backup station (IMO)
+VEDUR_URL = "https://api.vedur.is/weather/observations/aws/10min/latest""
 WEATHER_STATION_ID = 1685
 WEATHER_STATION_NAME = "Þyrill"
 
 WIND_MAX_AGE = 30
-WIND_ARROW_LENGTH = 0.32  # Fraction of polar radius
+WIND_ARROW_LENGTH = 0.32  # fraction of polar radius
 WIND_COLOR = "#ffffff"
 
 # ADCP location and map parameters
 MAP_LAT = 64.393931
 MAP_LON = -21.466464
-MAP_WIDTH = 400 # Metres
+MAP_WIDTH = 400 # in metres
 MAP_OPACITY = 0.8
 WMS_URL = "https://gis.natt.is/mapcache/web-mercator/wms"
 WMS_LAYERS = ["LMI_Island_einfalt"]
@@ -104,6 +104,7 @@ GREEN = "#72e6ac"
 RED = "#ff747c"
 
 DEPTH_COLOR_PALETTE = (CYAN, ORANGE, "#f78cb7", "#b8a0ff", "#f0d76c")
+TARGET_DEPTHS = TARGET_DEPTHS[:len(DEPTH_COLOR_PALETTE)]
 DEPTH_COLORS = DEPTH_COLOR_PALETTE[:len(TARGET_DEPTHS)]
 
 
@@ -175,7 +176,7 @@ def get_map_image(
     )
 
 
-# Load basemap once at startup
+# Load basemap once at startup and store as image array
 try:
     map_image = get_map_image(
         WMS_URL,
@@ -192,8 +193,7 @@ except Exception as e:
 def add_polar_basemap(ax, image, alpha=0.5):
     """Render a circular RGBA basemap fitted exactly to the polar axes.
 
-    BboxImage tracks ax.bbox during drawing and window resizing. No
-    manually computed pixel-to-zoom conversion is necessary.
+    BboxImage tracks ax.bbox during drawing and window resizing.
     """
     image = np.asarray(image)
     height, width = image.shape[:2]
@@ -256,12 +256,12 @@ def get_wind(max_age=WIND_MAX_AGE):
 
         return {
             "speed": float(latest["f"]),
-            "direction": float(latest["d"]),  # FROM direction
+            "direction": float(latest["d"]),  # FROM direction (meteorological)
             "time": latest["time"],
             "station": station,
         }
 
-    # 1. Primary: Olíudreifing (M&T)
+    # Primary weather station (MOGT)
     try:
         response = requests.get(
             MOGT_URL,
@@ -295,10 +295,10 @@ def get_wind(max_age=WIND_MAX_AGE):
         print(f"{MOGT_STATION_NAME} unavailable: {e}")
         print(f"Trying {WEATHER_STATION_NAME}...")
 
-    # 2. Backup: Þyrill (IMO)
+    # Backup weather station (IMO)
     try:
         response = requests.get(
-            f"{VEDUR_URL}/observations/aws/10min/latest",
+            VEDUR_URL,
             params={
                 "station_id": WEATHER_STATION_ID,
                 "parameters": "basic",
@@ -311,6 +311,7 @@ def get_wind(max_age=WIND_MAX_AGE):
 
         return validate(df, WEATHER_STATION_NAME)
 
+    # If neither primary nor backup weather station works raise error
     except Exception as e:
         raise RuntimeError(
             f"Weather data unavailable. "
@@ -356,7 +357,7 @@ def update_wind_label():
 # File loading
 # ============================================================
 
-def get_recent_files(hours=24):
+def get_recent_files(hours):
     cutoff = time.time() - hours * 3600
 
     files = glob.glob(
@@ -373,17 +374,19 @@ def get_recent_files(hours=24):
             f"No telemetry files modified in the last {hours} hours."
         )
 
-    # Filenames contain timestamps, so this sorts chronologically
+    # Filenames usually contain timestamps, so this sorts them chronologically
+    # Correct sorting is not absolutely critical though as data is eventually sorted by time
     return sorted(files)
 
 
 def load_data():
-    source_files = get_recent_files(hours=24)
+    # Get all recent telemetry files (within specified interval plus 1 hour buffer)
+    source_files = get_recent_files(hours=HISTORY_HOURS + 1)
 
     os.makedirs(os.path.dirname(TXT_FILE), exist_ok=True)
     os.makedirs(os.path.dirname(NC_FILE), exist_ok=True)
 
-    # Combine all recent telemetry files into latest.txt
+    # Combine all recent telemetry files into one file: latest.txt
     temp_file = TXT_FILE + ".tmp"
 
     with open(temp_file, "wb") as dest:
@@ -445,7 +448,7 @@ def extract_velocity(ds, target_depths=TARGET_DEPTHS):
     north = np.full((len(targets), n_times), np.nan)
     east = np.full((len(targets), n_times), np.nan)
 
-    # Process each velocity profile once
+    # Process each velocity profile
     for i in range(n_times):
 
         valid = (
@@ -466,9 +469,8 @@ def extract_velocity(ds, target_depths=TARGET_DEPTHS):
         n = n[order]
         e = e[order]
 
-        # Only interpolate within the measured depth range
+        # Interpolate within only the measured depth range
         inside = (targets >= z[0]) & (targets <= z[-1])
-
         north[inside, i] = np.interp(targets[inside], z, n)
         east[inside, i] = np.interp(targets[inside], z, e)
 
@@ -529,7 +531,8 @@ def get_data_status(last_data_time, now):
 
 fig = plt.figure(figsize=(16, 9.5))
 
-# Left: Three velocity plots, keeping existing vertical extent
+# Left side 
+# Three velocity plots
 gs_left = fig.add_gridspec(
     3, 1,
     left=0.085,
@@ -544,7 +547,8 @@ axes = [
     for i in range(3)
 ]
 
-# Right: Numerical dashboard and polar plot extending lower
+# Right side
+# Numerical dashboard and polar plot
 gs_right = fig.add_gridspec(
     2, 1,
     left=0.66,
@@ -605,7 +609,7 @@ def add_maintainer_logo():
         print("To enable SVG logos, install CairoSVG: pip install cairosvg")
         return None, None, None
 
-    # Fit the logo without stretching inside its top-right header area.
+    # Fit logo while retaining original aspect ratio
     height_px, width_px = rgba.shape[:2]
     fig_w, fig_h = fig.get_size_inches()
     w = LOGO_SIZE
@@ -649,7 +653,7 @@ def update_logo_position(event=None):
 fig.canvas.mpl_connect("resize_event", update_logo_position)
 
 
-# Footer — separated from time-axis label
+# Footer containing data freshness label
 status_text = fig.text(
     0.09, 0.12,
     "INITIALIZING",
@@ -679,15 +683,13 @@ next_refresh_text = fig.text(
     color=MUTED,
 )
 
-# Miniature water-depth plot in the footer, right of the telemetry status.
-# Coordinates are relative to the figure, so this remains separate from GridSpec.
+# Small water-depth plot
 ax_depth = fig.add_axes([0.38, 0.04, 0.25, 0.09])
 ax_depth.set_facecolor(PANEL)
 ax_depth.set_in_layout(False)
 
 
-# Dedicated wind readout below the polar circle and S/SE/SW labels.
-# Position follows the polar axes when the window is resized.
+# Dedicated wind readout below the polar circle
 wind_text = fig.text(
     0.78, 0.115,
     "Wind: —",
@@ -770,7 +772,7 @@ def update_info_panel(data, water_depth):
     for spine in ax_info.spines.values():
         spine.set_visible(False)
 
-    # Automatically generate rows for every configured depth.
+    # Generate rows for every configured depth.
     rows = []
     for depth, color in zip(TARGET_DEPTHS, DEPTH_COLORS):
         north = float(data[depth]["VN"][-1])
@@ -796,7 +798,7 @@ def update_info_panel(data, water_depth):
         va="center",
     )
 
-    # Reduce text size slightly as more selected depths are added.
+    # Reduce text size as more depths are selected
     fontsize = max(7, min(10, 11 - 0.25 * max(0, len(rows) - 7)))
     positions = np.linspace(0.77, 0.09, len(rows))
 
@@ -836,7 +838,7 @@ class ArrowLegendHandler(HandlerBase):
         head_length = height * 1.2
         head_width = height * 0.95
 
-        # Shaft (solid or dashed)
+        # Arrow shaft
         shaft = Line2D(
             [x0, x1 - head_length],
             [y, y],
@@ -846,7 +848,7 @@ class ArrowLegendHandler(HandlerBase):
             transform=trans,
         )
 
-        # Solid, pointed arrowhead
+        # Arrowhead
         head = Polygon(
             [
                 (x1, y),
@@ -870,7 +872,7 @@ def update_polar(data, visible):
     ax_polar.set_theta_zero_location("N")
     ax_polar.set_theta_direction(-1)
 
-    # Scale using only the latest observation for the selected depths.
+    # Scale based on the latest observations
     recent_indices = np.flatnonzero(visible)
     latest_idx = recent_indices[-1] if recent_indices.size else None
 
@@ -884,7 +886,7 @@ def update_polar(data, visible):
 
     ax_polar.set_ylim(0, max_speed)
 
-    # Basemap follows the polar axes' exact bounding box
+    # Basemap conforms to the polar axis bounding box
     if map_image is not None:
         add_polar_basemap(ax_polar, map_image, alpha=MAP_OPACITY)
 
@@ -896,8 +898,7 @@ def update_polar(data, visible):
     ax_polar.grid(color="white", alpha=0.25, linewidth=0.7)
     ax_polar.spines["polar"].set_color(GRID)
 
-    # Draw current velocity vectors using the latest observation
-    
+    # Draw current velocity vectors using the most recent observation
     for depth, color in zip(TARGET_DEPTHS, DEPTH_COLORS):
         if latest_idx is None:
             continue
@@ -929,14 +930,13 @@ def update_polar(data, visible):
             zorder=10,
         )
 
-    # Fixed-length dashed wind arrow: direction of travel (TO).
-    # Meteorological wind direction is where the wind comes FROM.
+    # Fixed-length dashed wind arrow pointing in where the wind GOES TO
     if wind_data is not None:
+        # meteorological wind direction is where the wind COMES FROM (shift by 180 deg)
         theta_wind = np.deg2rad((wind_data["direction"] + 180) % 360)
         rmax = ax_polar.get_ylim()[1]
         r_end = WIND_ARROW_LENGTH * rmax
 
-        # Dashed shaft and solid pointed tip render more cleanly in polar axes.
         ax_polar.plot(
             [theta_wind, theta_wind],
             [0, 0.82 * r_end],
@@ -1009,7 +1009,6 @@ def update_polar(data, visible):
         handler_map={
             FancyArrowPatch: ArrowLegendHandler()
         },
-        # Anchor the *bottom-right edge*, so additional entries grow upward.
         loc="lower right",
         bbox_to_anchor=(1.32, -0.05),
         bbox_transform=ax_polar.transAxes,
@@ -1034,7 +1033,7 @@ def update_timeseries(times, data, now, visible):
     variables = [
         ("VN", "Northward velocity", "m/s"),
         ("VE", "Eastward velocity", "m/s"),
-        ("speed", "Horizontal current speed", "m/s"),
+        ("speed", "Current speed", "m/s"),
     ]
 
     for ax, (var, name, unit) in zip(axes, variables):
@@ -1056,7 +1055,7 @@ def update_timeseries(times, data, now, visible):
         
         ax.set_ylabel(f"{name}\n({unit})", labelpad=12)
 
-        # Always use REAL current time
+        # Update limits to current time, independent of data
         ax.set_xlim(start_time, now)
 
         ax.grid(alpha=0.5, linewidth=0.6)
@@ -1080,12 +1079,10 @@ def update_timeseries(times, data, now, visible):
             mdates.DateFormatter("%H:%M", tz=UTC)
         )
 
-    # Put the velocity legend just above the first subplot without
-    # allowing it to move or resize any axes.
     velocity_legend = axes[0].legend(
         loc="lower right",
         bbox_to_anchor=(1.0, 1.025),
-        ncol=min(len(TARGET_DEPTHS), 4),
+        ncol=len(TARGET_DEPTHS),
         frameon=False,
         labelcolor=TEXT,
         fontsize=9,
@@ -1095,7 +1092,7 @@ def update_timeseries(times, data, now, visible):
     )
     velocity_legend.set_in_layout(False)
 
-    # Only bottom subplot gets a time-axis label
+    # Only add a time-axis label to the bottom subplot
     for ax in axes[:-1]:
         ax.tick_params(labelbottom=False)
 
@@ -1104,7 +1101,7 @@ def update_timeseries(times, data, now, visible):
 
 
 # ============================================================
-# Water-depth mini plot
+# Water-depth plot
 # ============================================================
 
 def update_depth_plot(times, water_depth, now):
@@ -1132,7 +1129,6 @@ def update_depth_plot(times, water_depth, now):
     ax_depth.yaxis.set_major_locator(plt.MaxNLocator(3))
 
     # Keep small tidal changes visible without using an exaggerated range
-    # for perfectly constant data.
     finite = depth[np.isfinite(depth)]
     if len(finite):
         shown = np.asarray(times) >= (
@@ -1146,7 +1142,7 @@ def update_depth_plot(times, water_depth, now):
 
 
 # ============================================================
-# Dashboard export (HTML, SVG, PNG)
+# Dashboard export
 # ============================================================
 
 def _atomic_write(path, content):
@@ -1165,11 +1161,9 @@ def export_dashboard():
     """
     os.makedirs(EXPORT_DIR, exist_ok=True)
     update_logo_position()
-    
-    # Preserve text as SVG <text> elements, not font outlines.
-    # Embed the basemap image rather than referring to a local path.
+
+    # Preserve text as SVG text elements
     svg_buffer = BytesIO()
-    # The web version gets a real vector logo instead of Matplotlib's raster copy.
     if logo_artist is not None:
         logo_artist.set_visible(False)
     try:
@@ -1185,14 +1179,10 @@ def export_dashboard():
         raise ValueError("No SVG element found in exported dashboard")
     inline_svg = svg[start:]
 
-    # Keep repeated spaces in SVG text (notably the aligned footer labels).
-    # Browsers normally collapse consecutive whitespace in SVG text nodes.
     inline_svg = inline_svg.replace(
         "<svg ", '<svg xml:space="preserve" ', 1
     )
 
-    # Preserve spaces in both standalone SVG and the HTML's inline SVG.
-    # !important overrides Matplotlib's per-element inline font-family.
     svg_font_css = (
         f"text, tspan {{ font-family: '{FONT_FAMILY}', "
         f"'{FONT_FALLBACK}', sans-serif !important; "
@@ -1205,11 +1195,10 @@ def export_dashboard():
         + inline_svg[svg_tag_end + 1:]
     )
 
-    # Embed the original logo as an SVG image in the exported SVG/HTML.
-    # It stays vector-based, self-contained, and works on the web server.
+    # Embed logo as an SVG image
     if logo_svg_bytes is not None:
         left, bottom, width, height = logo_bounds
-        figure_width, figure_height = fig.get_size_inches() * 72  # SVG viewBox points
+        figure_width, figure_height = fig.get_size_inches() * 72  #svg viewbox points
         x = left * figure_width
         y = (1 - bottom - height) * figure_height
         w = width * figure_width
@@ -1245,7 +1234,6 @@ def export_dashboard():
 {inline_svg}
 <script>
   // Check the server regularly and bypass cached responses.
-  // Replace only the SVG when a newer dashboard is available.
   let displayedVersion = document.querySelector('meta[name="dashboard-generated"]').content;
   let lastModified = null;
   let checking = false;
@@ -1296,7 +1284,6 @@ def export_dashboard():
 
     _atomic_write(os.path.join(EXPORT_DIR, "latest.svg"), inline_svg.encode("utf-8"))
     _atomic_write(os.path.join(EXPORT_DIR, "latest.png"), png_buffer.getvalue())
-    # Write HTML last, once its companion exports are complete.
     _atomic_write(os.path.join(EXPORT_DIR, "latest.html"), html_page.encode("utf-8"))
 
 
@@ -1311,7 +1298,7 @@ last_filename = None
 def update_dashboard(ds, filename, refresh_time=None):
     now = refresh_time if refresh_time is not None else utc_now()
 
-    # Ensure chronological order
+    # Ensure that the times are in chronological order
     times = pd.to_datetime(
         ds["TIME"].values,
         utc=True,
@@ -1341,7 +1328,7 @@ def update_dashboard(ds, filename, refresh_time=None):
     update_info_panel(data, water_depth)
     update_polar(data, visible)
 
-    # Determine actual data freshness
+    # Determine data freshness
     state, color, age = get_data_status(last_data_time, now)
 
     status_text.set_text(
@@ -1379,7 +1366,6 @@ def refresh():
 
     now = utc_now()
 
-    # Weather failure must not interrupt telemetry refresh.
     refresh_wind()
     update_wind_label()
 
@@ -1401,8 +1387,7 @@ def refresh():
         print(f"Refresh failed: {e}")
         traceback.print_exc()
 
-        # Continue advancing the time axis using cached data,
-        # but do not claim a successful refresh.
+        # Continue advancing the time axis using cached data
         if last_dataset is not None:
             try:
                 update_dashboard(
