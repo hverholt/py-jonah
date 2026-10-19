@@ -75,7 +75,7 @@ MOGT_STATION_ID = 1035
 MOGT_STATION_NAME = "ODR Hvalfjörður"
 
 # Backup station (IMO)
-VEDUR_URL = "https://api.vedur.is/weather/observations/aws/10min/latest""
+VEDUR_URL = "https://api.vedur.is/weather/observations/aws/10min/latest"
 WEATHER_STATION_ID = 1685
 WEATHER_STATION_NAME = "Þyrill"
 
