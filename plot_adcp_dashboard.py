@@ -70,9 +70,11 @@ STALE_AFTER_SECONDS = 180
 HISTORY_HOURS = 24
 REFRESH_SECONDS = 120
 WEB_POLL_SECONDS = 15
-DIRECTION_WRAP_THRESHOLD = 160 # deg
-MIN_DIRECTION_SPEED = 0.015      # m/s
-MAX_DIRECTION_GAP_FACTOR = 2.5
+DIRECTION_WRAP_THRESHOLD = 200 # deg
+RUNNING_MEAN_SAMPLES = 10
+RAW_LINE_ALPHA = 0.5
+MIN_DIRECTION_SPEED = 0.01  # m/s
+MAX_CURRENT_GAP_FACTOR = 2.5
 
 # Primary station (MOGT)
 MOGT_URL = "https://vedur.mogt.is/harbor/index.php"
@@ -1048,54 +1050,80 @@ def update_polar(data, visible):
 # Time-series plots
 # ============================================================
 
+def get_time_gaps(times):
+    """Mark observations separated by unusually long or nonpositive time gaps."""
+    breaks = np.zeros(len(times), dtype=bool)
+    if len(times) < 2:
+        return breaks
 
-def split_direction_crossings(times, directions):
-    # Determine the typical sampling interval
     intervals = np.array([
         (b - a).total_seconds()
         for a, b in zip(times[:-1], times[1:])
     ])
-    intervals = intervals[intervals > 0]
+    positive = intervals[intervals > 0]
+    max_gap = np.median(positive) * MAX_CURRENT_GAP_FACTOR if positive.size else 0
+    breaks[1:] = (intervals <= 0) | (intervals > max_gap)
+    return breaks
 
-    max_gap = (
-        np.median(intervals) * MAX_DIRECTION_GAP_FACTOR
-        if intervals.size else np.inf
-    )
 
+def running_mean(values, breaks):
+    """Centered running mean without averaging across missing data or time gaps."""
+    values = np.asarray(values, dtype=float)
+    result = np.full(values.shape, np.nan)
+    window = max(1, int(RUNNING_MEAN_SAMPLES))
+
+    before = window // 2
+    after = window - before - 1
+
+    for i in range(before, len(values) - after):
+        start, stop = i - before, i + after + 1
+        samples = values[start:stop]
+
+        if np.all(np.isfinite(samples)) and not np.any(breaks[start + 1:stop]):
+            result[i] = np.mean(samples)
+
+    return result
+
+
+def split_time_gaps(times, values, breaks):
+    """Insert missing points so lines cannot cross gaps in observations."""
     plot_times, plot_values = [], []
-
-    for i, (t, angle) in enumerate(zip(times, directions)):
-        if i:
-            gap = (t - times[i - 1]).total_seconds()
-
-            if gap <= 0 or gap > max_gap:
-                plot_times.append(t)
-                plot_values.append(np.nan)
-
-            elif np.isfinite(directions[i - 1]) and np.isfinite(angle):
-                previous = directions[i - 1]
-                jump = angle - previous
-
-                if abs(jump) > DIRECTION_WRAP_THRESHOLD:
-                    boundary = 360.0 if jump < 0 else 0.0
-                    next_angle = angle + (360.0 if jump < 0 else -360.0)
-
-                    fraction = (boundary - previous) / (next_angle - previous)
-                    crossing_time = times[i - 1] + (t - times[i - 1]) * fraction
-
-                    plot_times.extend((crossing_time, crossing_time, crossing_time))
-                    plot_values.extend((boundary, np.nan, 360.0 - boundary))
-
+    for i, (t, value) in enumerate(zip(times, values)):
+        if breaks[i]:
+            plot_times.append(t)
+            plot_values.append(np.nan)
         plot_times.append(t)
-        plot_values.append(angle)
-
+        plot_values.append(value)
     return plot_times, plot_values
 
+
+def split_direction_crossings(times, directions, breaks):
+    plot_times, plot_values = [], []
+    for i, (t, angle) in enumerate(zip(times, directions)):
+        if i and breaks[i]:
+            plot_times.append(t)
+            plot_values.append(np.nan)
+        elif i and np.isfinite(directions[i - 1]) and np.isfinite(angle):
+            previous = directions[i - 1]
+            jump = angle - previous
+            if abs(jump) > DIRECTION_WRAP_THRESHOLD:
+                boundary = 360.0 if jump < 0 else 0.0
+                next_angle = angle + (360.0 if jump < 0 else -360.0)
+                fraction = (boundary - previous) / (next_angle - previous)
+                crossing_time = times[i - 1] + (t - times[i - 1]) * fraction
+                plot_times.extend((crossing_time, crossing_time, crossing_time))
+                plot_values.extend((boundary, np.nan, 360.0 - boundary))
+        plot_times.append(t)
+        plot_values.append(angle)
+    return plot_times, plot_values
 
 
 def update_timeseries(times, data, water_depth, now, visible):
     start_time = now - dt.timedelta(hours=HISTORY_HOURS)
-    times_visible = np.asarray(times)[visible]
+    all_times = np.asarray(times)
+    times_visible = all_times[visible]
+    time_gaps = get_time_gaps(all_times)
+    visible_gaps = time_gaps[visible]
 
     variables = [
         ("direction", "Current direction", "°"),
@@ -1119,25 +1147,40 @@ def update_timeseries(times, data, water_depth, now, visible):
             ax.yaxis.set_major_locator(plt.MaxNLocator(3))
         else:
             for depth, color in zip(TARGET_DEPTHS, DEPTH_COLORS):
-                plot_times = times_visible
                 if var == "direction":
-                    north = np.asarray(data[depth]["VN"])[visible]
-                    east = np.asarray(data[depth]["VE"])[visible]
-                    values = np.degrees(np.arctan2(east, north)) % 360
-                    values[np.hypot(east, north) <= MIN_DIRECTION_SPEED] = np.nan
-                    plot_times, values = split_direction_crossings(times_visible, values)
-                else:
-                    values = np.asarray(data[depth]["speed"])[visible]
+                    north = np.asarray(data[depth]["VN"], dtype=float)
+                    east = np.asarray(data[depth]["VE"], dtype=float)
+                    speed = np.hypot(north, east)
+                    reliable = speed > MIN_DIRECTION_SPEED
+                    north = np.where(reliable, north, np.nan)
+                    east = np.where(reliable, east, np.nan)
 
-                ax.plot(
-                    plot_times,
-                    values,
-                    color=color,
-                    lw=1.8,
-                    alpha=0.95,
-                    solid_joinstyle="bevel",
-                    label=f"{depth:g} m",
-                )
+                    raw = np.degrees(np.arctan2(east, north)) % 360
+                    mean_north = running_mean(north, time_gaps)
+                    mean_east = running_mean(east, time_gaps)
+                    mean = np.degrees(np.arctan2(mean_east, mean_north)) % 360
+                    mean[np.hypot(mean_north, mean_east) <= MIN_DIRECTION_SPEED] = np.nan
+
+                    raw_times, raw_values = split_direction_crossings(
+                        times_visible, raw[visible], visible_gaps
+                    )
+                    mean_times, mean_values = split_direction_crossings(
+                        times_visible, mean[visible], visible_gaps
+                    )
+                else:
+                    raw = np.asarray(data[depth]["speed"], dtype=float)
+                    mean = running_mean(raw, time_gaps)
+                    raw_times, raw_values = split_time_gaps(
+                        times_visible, raw[visible], visible_gaps
+                    )
+                    mean_times, mean_values = split_time_gaps(
+                        times_visible, mean[visible], visible_gaps
+                    )
+
+                ax.plot(raw_times, raw_values, color=color, lw=1.3,
+                        alpha=RAW_LINE_ALPHA, solid_joinstyle="bevel")
+                ax.plot(mean_times, mean_values, color=color, lw=1.5,
+                        alpha=1.0, solid_joinstyle="bevel", label=f"{depth:g} m")
 
         ax.set_ylabel(f"{name} ({unit})", labelpad=12)
         ax.set_xlim(start_time, now)
@@ -1167,7 +1210,23 @@ def update_timeseries(times, data, water_depth, now, visible):
         columnspacing=1.2,
         borderaxespad=0,
     )
+    axes[0].add_artist(velocity_legend)
     velocity_legend.set_in_layout(False)
+
+    style_legend = axes[0].legend(
+        [Line2D([], [], color=MUTED, lw=1.3, alpha=RAW_LINE_ALPHA),
+         Line2D([], [], color=MUTED, lw=1.5)],
+        ["Raw", f"{RUNNING_MEAN_SAMPLES}-sample mean"],
+        loc="lower left",
+        bbox_to_anchor=(0.0, 1.025),
+        ncol=2,
+        frameon=False,
+        labelcolor=TEXT,
+        fontsize=9,
+        handlelength=2.0,
+        borderaxespad=0,
+    )
+    style_legend.set_in_layout(False)
 
     for ax in axes[:-1]:
         ax.tick_params(labelbottom=False)
