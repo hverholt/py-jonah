@@ -60,7 +60,9 @@ LOGO_SIZE = 0.16
 
 
 # Data settings
-TARGET_DEPTHS = (1, 1.5, 2, 3, 4, 5)  # metres below sea surface
+TARGET_DEPTHS = (2, 5, 10)  # metres below sea surface
+AVERAGING_WIDTH = 4.0  # metres, 0 for point measurements
+MIN_DEPTH = 1  # metres below sea surface
 DBAR_PER_METER = 1.0065
 
 # Live plot settings
@@ -68,6 +70,9 @@ STALE_AFTER_SECONDS = 180
 HISTORY_HOURS = 24
 REFRESH_SECONDS = 120
 WEB_POLL_SECONDS = 15
+DIRECTION_WRAP_THRESHOLD = 160 # deg
+MIN_DIRECTION_SPEED = 0.015      # m/s
+MAX_DIRECTION_GAP_FACTOR = 2.5
 
 # Primary station (MOGT)
 MOGT_URL = "https://vedur.mogt.is/harbor/index.php"
@@ -422,8 +427,9 @@ def load_data():
 # Velocity extraction
 # ============================================================
 
-def extract_velocity(ds, target_depths=TARGET_DEPTHS):
-    """Interpolate horizontal velocities at fixed depths below the surface."""
+def extract_velocity(ds, target_depths=TARGET_DEPTHS,
+                     averaging_width=AVERAGING_WIDTH, min_depth=MIN_DEPTH):
+    """Depth-average horizontal velocities around selected depths below the surface."""
 
     vn_da = ds["VN"].transpose("TIME", "CN")
     ve_da = ds["VE"].transpose("TIME", "CN")
@@ -450,9 +456,9 @@ def extract_velocity(ds, target_depths=TARGET_DEPTHS):
 
     # Process each velocity profile
     for i in range(n_times):
-
         valid = (
             np.isfinite(depth[i])
+            & (depth[i] >= min_depth)
             & np.isfinite(vn[i])
             & np.isfinite(ve[i])
         )
@@ -469,10 +475,32 @@ def extract_velocity(ds, target_depths=TARGET_DEPTHS):
         n = n[order]
         e = e[order]
 
-        # Interpolate within only the measured depth range
-        inside = (targets >= z[0]) & (targets <= z[-1])
-        north[inside, i] = np.interp(targets[inside], z, n)
-        east[inside, i] = np.interp(targets[inside], z, e)
+        for j, target in enumerate(targets):
+            if not (z[0] <= target <= z[-1]):
+                continue
+
+            half_width = max(0.0, min(
+                averaging_width / 2,
+                target - min_depth,
+                target - z[0],
+                z[-1] - target,
+            ))
+
+            if half_width == 0:
+                north[j, i] = np.interp(target, z, n)
+                east[j, i] = np.interp(target, z, e)
+                continue
+
+            lower, upper = target - half_width, target + half_width
+            within = (z > lower) & (z < upper)
+            sample_depths = np.concatenate(([lower], z[within], [upper]))
+            dz = np.diff(sample_depths)
+
+            n_values = np.interp(sample_depths, z, n)
+            e_values = np.interp(sample_depths, z, e)
+
+            north[j, i] = np.sum((n_values[:-1] + n_values[1:]) * dz) / (2 * (upper - lower))
+            east[j, i] = np.sum((e_values[:-1] + e_values[1:]) * dz) / (2 * (upper - lower))
 
     result = {}
 
@@ -531,21 +559,20 @@ def get_data_status(last_data_time, now):
 
 fig = plt.figure(figsize=(16, 9.5))
 
-# Left side 
-# Three velocity plots
+# Left side: direction, speed, and water depth
 gs_left = fig.add_gridspec(
     3, 1,
     left=0.085,
     right=0.63,
     top=0.855,
     bottom=0.22,
+    height_ratios=[1, 1, 0.6],
     hspace=0.15,
 )
 
-axes = [
-    fig.add_subplot(gs_left[i, 0])
-    for i in range(3)
-]
+axes = []
+for i in range(3):
+    axes.append(fig.add_subplot(gs_left[i, 0], sharex=axes[0] if axes else None))
 
 # Right side
 # Numerical dashboard and polar plot
@@ -565,7 +592,7 @@ ax_polar = fig.add_subplot(gs_right[1, 0], projection="polar")
 # Header
 fig.text(
     0.085, 0.95,
-    "ADCP  -  LIVE CURRENT MONITOR",
+    "HVALFJÖRÐUR ADCP  -  LIVE CURRENT MONITOR",
     fontsize=19,
     fontweight="bold",
     color=TEXT,
@@ -682,12 +709,6 @@ next_refresh_text = fig.text(
     fontsize=9,
     color=MUTED,
 )
-
-# Small water-depth plot
-ax_depth = fig.add_axes([0.38, 0.04, 0.25, 0.09])
-ax_depth.set_facecolor(PANEL)
-ax_depth.set_in_layout(False)
-
 
 # Dedicated wind readout below the polar circle
 wind_text = fig.text(
@@ -1027,59 +1048,115 @@ def update_polar(data, visible):
 # Time-series plots
 # ============================================================
 
-def update_timeseries(times, data, now, visible):
+
+def split_direction_crossings(times, directions):
+    # Determine the typical sampling interval
+    intervals = np.array([
+        (b - a).total_seconds()
+        for a, b in zip(times[:-1], times[1:])
+    ])
+    intervals = intervals[intervals > 0]
+
+    max_gap = (
+        np.median(intervals) * MAX_DIRECTION_GAP_FACTOR
+        if intervals.size else np.inf
+    )
+
+    plot_times, plot_values = [], []
+
+    for i, (t, angle) in enumerate(zip(times, directions)):
+        if i:
+            gap = (t - times[i - 1]).total_seconds()
+
+            if gap <= 0 or gap > max_gap:
+                plot_times.append(t)
+                plot_values.append(np.nan)
+
+            elif np.isfinite(directions[i - 1]) and np.isfinite(angle):
+                previous = directions[i - 1]
+                jump = angle - previous
+
+                if abs(jump) > DIRECTION_WRAP_THRESHOLD:
+                    boundary = 360.0 if jump < 0 else 0.0
+                    next_angle = angle + (360.0 if jump < 0 else -360.0)
+
+                    fraction = (boundary - previous) / (next_angle - previous)
+                    crossing_time = times[i - 1] + (t - times[i - 1]) * fraction
+
+                    plot_times.extend((crossing_time, crossing_time, crossing_time))
+                    plot_values.extend((boundary, np.nan, 360.0 - boundary))
+
+        plot_times.append(t)
+        plot_values.append(angle)
+
+    return plot_times, plot_values
+
+
+
+def update_timeseries(times, data, water_depth, now, visible):
     start_time = now - dt.timedelta(hours=HISTORY_HOURS)
+    times_visible = np.asarray(times)[visible]
 
     variables = [
-        ("VN", "Northward velocity", "m/s"),
-        ("VE", "Eastward velocity", "m/s"),
+        ("direction", "Current direction", "°"),
         ("speed", "Current speed", "m/s"),
+        ("water_depth", "Water depth", "m"),
     ]
 
     for ax, (var, name, unit) in zip(axes, variables):
         ax.clear()
-
         ax.set_facecolor(PANEL)
         ax.set_axisbelow(True)
-        
-        for depth, color in zip(TARGET_DEPTHS, DEPTH_COLORS):
-            ax.plot(
-                np.asarray(times)[visible],
-                np.asarray(data[depth][var])[visible],
-                color=color,
-                lw=1.8,
-                alpha=0.95,
-                solid_joinstyle="bevel",
-                label=f"{depth:g} m",
-            )
-        
-        ax.set_ylabel(f"{name}\n({unit})", labelpad=12)
 
-        # Update limits to current time, independent of data
+        if var == "water_depth":
+            values = np.asarray(water_depth, dtype=float)[visible]
+            ax.plot(times_visible, values, color=GREEN, lw=1.35)
+            recent = values[np.isfinite(values)]
+            if recent.size:
+                lo, hi = recent.min(), recent.max()
+                pad = max((hi - lo) * 0.15, 0.05)
+                ax.set_ylim(lo - pad, hi + pad)
+            ax.yaxis.set_major_locator(plt.MaxNLocator(3))
+        else:
+            for depth, color in zip(TARGET_DEPTHS, DEPTH_COLORS):
+                plot_times = times_visible
+                if var == "direction":
+                    north = np.asarray(data[depth]["VN"])[visible]
+                    east = np.asarray(data[depth]["VE"])[visible]
+                    values = np.degrees(np.arctan2(east, north)) % 360
+                    values[np.hypot(east, north) <= MIN_DIRECTION_SPEED] = np.nan
+                    plot_times, values = split_direction_crossings(times_visible, values)
+                else:
+                    values = np.asarray(data[depth]["speed"])[visible]
+
+                ax.plot(
+                    plot_times,
+                    values,
+                    color=color,
+                    lw=1.8,
+                    alpha=0.95,
+                    solid_joinstyle="bevel",
+                    label=f"{depth:g} m",
+                )
+
+        ax.set_ylabel(f"{name} ({unit})", labelpad=12)
         ax.set_xlim(start_time, now)
-
         ax.grid(alpha=0.5, linewidth=0.6)
         ax.tick_params(length=0, pad=7)
 
-        if var != "speed":
-            ax.axhline(
-                0,
-                color=MUTED,
-                lw=0.8,
-                alpha=0.7,
-            )
-        else:
+        if var == "direction":
+            ax.set_ylim(0, 360)
+            ax.set_yticks([0, 90, 180, 270, 360],
+                          ["0° N", "90° E", "180° S", "270° W", "360° N"])
+        elif var == "speed":
             ax.set_ylim(bottom=0)
 
-        ax.xaxis.set_major_locator(
-            mdates.AutoDateLocator(maxticks=8, tz=UTC)
-        )
-
-        ax.xaxis.set_major_formatter(
-            mdates.DateFormatter("%H:%M", tz=UTC)
-        )
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=8, tz=UTC))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=UTC))
 
     velocity_legend = axes[0].legend(
+        title="Current depth",
+        alignment="right",
         loc="lower right",
         bbox_to_anchor=(1.0, 1.025),
         ncol=len(TARGET_DEPTHS),
@@ -1092,53 +1169,11 @@ def update_timeseries(times, data, now, visible):
     )
     velocity_legend.set_in_layout(False)
 
-    # Only add a time-axis label to the bottom subplot
     for ax in axes[:-1]:
         ax.tick_params(labelbottom=False)
 
     axes[-1].set_xlabel("Time (UTC)", color=TEXT)
     axes[-1].xaxis.set_label_coords(0.45, -0.25)
-
-
-# ============================================================
-# Water-depth plot
-# ============================================================
-
-def update_depth_plot(times, water_depth, now):
-    """Small pressure-derived depth trace on the same UTC window as velocities."""
-    ax_depth.clear()
-    ax_depth.set_facecolor(PANEL)
-
-    depth = np.asarray(water_depth, dtype=float)
-    ax_depth.plot(times, depth, color=GREEN, lw=1.35)
-
-    ax_depth.set_xlim(
-        now - dt.timedelta(hours=HISTORY_HOURS),
-        now,
-    )
-    ax_depth.set_title("WATER DEPTH (m)", loc="left", color=TEXT,
-                       fontsize=8, pad=7)
-    ax_depth.grid(True, color=GRID, alpha=0.45, lw=0.5)
-    ax_depth.tick_params(colors=MUTED, labelsize=7, length=2, pad=2)
-    ax_depth.xaxis.set_major_locator(
-        mdates.AutoDateLocator(minticks=2, maxticks=3, tz=UTC)
-    )
-    ax_depth.xaxis.set_major_formatter(
-        mdates.DateFormatter("%H:%M", tz=UTC)
-    )
-    ax_depth.yaxis.set_major_locator(plt.MaxNLocator(3))
-
-    # Keep small tidal changes visible without using an exaggerated range
-    finite = depth[np.isfinite(depth)]
-    if len(finite):
-        shown = np.asarray(times) >= (
-            now - dt.timedelta(hours=HISTORY_HOURS)
-        )
-        recent = depth[shown & np.isfinite(depth)]
-        if len(recent):
-            lo, hi = recent.min(), recent.max()
-            pad = max((hi - lo) * 0.15, 0.05)
-            ax_depth.set_ylim(lo - pad, hi + pad)
 
 
 # ============================================================
@@ -1323,8 +1358,7 @@ def update_dashboard(ds, filename, refresh_time=None):
     data, water_depth = extract_velocity(ds)
 
     # Update all panels
-    update_timeseries(times.to_pydatetime(), data, now, visible)
-    update_depth_plot(times.to_pydatetime(), water_depth, now)
+    update_timeseries(times.to_pydatetime(), data, water_depth, now, visible)
     update_info_panel(data, water_depth)
     update_polar(data, visible)
 
