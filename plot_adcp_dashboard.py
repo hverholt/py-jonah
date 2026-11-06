@@ -72,7 +72,7 @@ REFRESH_SECONDS = 120
 WEB_POLL_SECONDS = 15
 DIRECTION_WRAP_THRESHOLD = 200 # deg
 RUNNING_MEAN_SAMPLES = 10
-RAW_LINE_ALPHA = 0.5
+RAW_LINE_ALPHA = 0.35
 MIN_DIRECTION_SPEED = 0.01  # m/s
 MAX_CURRENT_GAP_FACTOR = 2.5
 
@@ -1138,7 +1138,11 @@ def update_timeseries(times, data, water_depth, now, visible):
 
         if var == "water_depth":
             values = np.asarray(water_depth, dtype=float)[visible]
-            ax.plot(times_visible, values, color=GREEN, lw=1.35)
+            values = np.asarray(water_depth, dtype=float)[visible]
+            plot_times, plot_values = split_time_gaps(
+                times_visible, values, visible_gaps
+            )
+            ax.plot(plot_times, plot_values, color=GREEN, lw=1.35)
             recent = values[np.isfinite(values)]
             if recent.size:
                 lo, hi = recent.min(), recent.max()
