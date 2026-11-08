@@ -44,6 +44,7 @@ INPUT_DIR = r"C:\Users\Nortek1000\Documents\Nortek\Deployment\Online"
 # Intermediate and processed data
 TXT_FILE = str(ROOT / "data" / "interim" / "latest.txt")
 NC_FILE = str(ROOT / "data" / "processed" / "latest.nc")
+WIND_HISTORY_FILE = str(ROOT / "data" / "processed" / "wind_history.csv")
 
 # Output
 EXPORT_DIR = str(ROOT / "output" / "preview")
@@ -79,16 +80,19 @@ MAX_CURRENT_GAP_FACTOR = 2.5
 # Primary station (MOGT)
 MOGT_URL = "https://vedur.mogt.is/harbor/index.php"
 MOGT_STATION_ID = 1035
+MOGT_HARBOR_ID = 19
 MOGT_STATION_NAME = "ODR Hvalfjörður"
 
 # Backup station (IMO)
-VEDUR_URL = "https://api.vedur.is/weather/observations/aws/10min/latest"
+VEDUR_URL = "https://api.vedur.is/weather/observations/aws/10min"
 WEATHER_STATION_ID = 1685
 WEATHER_STATION_NAME = "Þyrill"
 
+# Wind plot settings
 WIND_MAX_AGE = 30
 WIND_ARROW_LENGTH = 0.32  # fraction of polar radius
 WIND_COLOR = "#ffffff"
+WIND_PLOT_ALPHA = 0.9
 
 # ADCP location and map parameters
 MAP_LAT = 64.393931
@@ -229,115 +233,144 @@ def add_polar_basemap(ax, image, alpha=0.5):
 
 wind_data = None
 wind_error = None
+wind_history = pd.DataFrame(columns=["time", "speed", "direction"])
 
 
-def get_wind(max_age=WIND_MAX_AGE):
-    """Return latest valid wind observation, preferring Olíudreifing."""
-
-    def validate(df, station):
-        df = df.copy()
-
-        for col in ("time", "f", "d"):
-            if col not in df:
-                raise ValueError(f"Missing field: {col}")
-
-        df["time"] = pd.to_datetime(
-            df["time"], utc=True, errors="coerce"
-        )
-        df["f"] = pd.to_numeric(df["f"], errors="coerce")
-        df["d"] = pd.to_numeric(df["d"], errors="coerce")
-
-        df = df.dropna(subset=["time", "f", "d"])
-        df = df[(df["f"] >= 0) & df["d"].between(0, 360)]
-
-        if df.empty:
-            raise ValueError("No valid wind observations")
-
-        latest = df.sort_values("time").iloc[-1]
-        age = (
-            pd.Timestamp.now(tz="UTC") - latest["time"]
-        ).total_seconds() / 60
-
-        if age < -5 or age > max_age:
-            raise ValueError(f"Observation age: {age:.1f} minutes")
-
-        return {
-            "speed": float(latest["f"]),
-            "direction": float(latest["d"]),  # FROM direction (meteorological)
-            "time": latest["time"],
-            "station": station,
-        }
-
-    # Primary weather station (MOGT)
-    try:
-        response = requests.get(
-            MOGT_URL,
-            params={
-                "action": "ReadingsDrillDown",
-                "stationid": MOGT_STATION_ID,
-            },
-            timeout=15,
-        )
-        response.raise_for_status()
-
-        tables = pd.read_html(StringIO(response.text))
-
-        df = next(
-            table for table in tables
-            if any("Vindur" in str(c) for c in table.columns)
-        ).copy()
-
-        df.columns = ["time", "f", "fg", "d", "t"]
-
-        df["time"] = pd.to_datetime(
-            df["time"],
-            format="%H:%M %d.%m.%Y",
-            errors="coerce",
-            utc=True,
-        )
-
-        return validate(df, MOGT_STATION_NAME)
-
-    except Exception as e:
-        print(f"{MOGT_STATION_NAME} unavailable: {e}")
-        print(f"Trying {WEATHER_STATION_NAME}...")
-
-    # Backup weather station (IMO)
-    try:
-        response = requests.get(
-            VEDUR_URL,
-            params={
-                "station_id": WEATHER_STATION_ID,
-                "parameters": "basic",
-            },
-            timeout=20,
-        )
-        response.raise_for_status()
-
-        df = pd.DataFrame(response.json())
-
-        return validate(df, WEATHER_STATION_NAME)
-
-    # If neither primary nor backup weather station works raise error
-    except Exception as e:
-        raise RuntimeError(
-            f"Weather data unavailable. "
-            f"{WEATHER_STATION_NAME}: {e}"
-        ) from e
+def clean_wind_observations(df):
+    """Standardize wind observations as UTC, speed (m/s), and FROM direction."""
+    df = df.copy()
+    df["time"] = pd.to_datetime(df["time"], utc=True, errors="coerce")
+    df["speed"] = pd.to_numeric(df["f"], errors="coerce")
+    df["direction"] = pd.to_numeric(df["d"], errors="coerce")
+    df = df.dropna(subset=["time", "speed", "direction"])
+    return df.loc[
+        (df["speed"] >= 0) & df["direction"].between(0, 360),
+        ["time", "speed", "direction"],
+    ]
 
 
-def refresh_wind():
-    """Update wind independently of ADCP processing."""
-    global wind_data, wind_error
+def get_mogt_wind_history():
+    """Combine ODR Hvalfjörður's newest=1 and back=1 readings."""
+    frames = []
+    for mode in ("newest", "back"):
+        try:
+            response = requests.get(
+                MOGT_URL,
+                params={"action": "ReadingsDrillDown", "harborid": MOGT_HARBOR_ID,
+                        "stationid": MOGT_STATION_ID, mode: 1},
+                timeout=15,
+            )
+            response.raise_for_status()
+            table = next(t for t in pd.read_html(StringIO(response.text))
+                         if any("Vindur" in str(c) for c in t.columns))
+            if len(table.columns) != 5:
+                raise ValueError("Unexpected ODR wind table format")
+            table.columns = ["time", "f", "fg", "d", "t"]
+            table["time"] = pd.to_datetime(
+                table["time"], format="%H:%M %d.%m.%Y", utc=True, errors="coerce"
+            )
+            frames.append(clean_wind_observations(table))
+        except Exception as exc:
+            print(f"ODR {mode}=1 unavailable: {exc}")
+
+    if not frames:
+        raise RuntimeError("ODR wind history unavailable")
+    return (pd.concat(frames, ignore_index=True)
+            .drop_duplicates("time", keep="last")
+            .sort_values("time").reset_index(drop=True))
+
+
+def get_vedur_latest():
+    """Fetch Þyrill's latest reading only (fallback for the wind arrow)."""
+    response = requests.get(
+        f"{VEDUR_URL}/latest",
+        params={"station_id": WEATHER_STATION_ID, "parameters": "basic"},
+        timeout=20,
+    )
+    response.raise_for_status()
+    df = pd.DataFrame(response.json())
+    if "station" in df.columns:
+        df = df.loc[df["station"].astype(str) == str(WEATHER_STATION_ID)]
+    return clean_wind_observations(df)
+
+
+def refresh_wind(now=None):
+    """Cache ODR history; use Þyrill only when ODR has no recent live reading."""
+    global wind_data, wind_error, wind_history
+    now = pd.Timestamp(now if now is not None else utc_now())
+
+    if wind_history.empty and os.path.isfile(WIND_HISTORY_FILE):
+        try:
+            cached = pd.read_csv(WIND_HISTORY_FILE)
+            # Earlier versions also cached Þyrill observations.
+            if "station" in cached.columns:
+                cached = cached.loc[cached["station"] == MOGT_STATION_NAME]
+            cached["time"] = pd.to_datetime(cached["time"], utc=True, errors="coerce")
+            wind_history = cached[["time", "speed", "direction"]].dropna()
+        except Exception as exc:
+            print(f"Wind cache unavailable: {exc}")
 
     try:
-        wind_data = get_wind()
-        wind_error = None
+        recent = get_mogt_wind_history()
+        wind_history = (pd.concat([wind_history, recent], ignore_index=True)
+                        .drop_duplicates("time", keep="last")
+                        .sort_values("time"))
+        wind_history = wind_history.loc[
+            (wind_history["time"] >= now - pd.Timedelta(hours=HISTORY_HOURS + 24))
+            & (wind_history["time"] <= now + pd.Timedelta(minutes=5))
+        ].reset_index(drop=True)
+        os.makedirs(os.path.dirname(WIND_HISTORY_FILE), exist_ok=True)
+        temporary = WIND_HISTORY_FILE + ".tmp"
+        wind_history.to_csv(temporary, index=False)
+        os.replace(temporary, WIND_HISTORY_FILE)
+    except Exception as exc:
+        print(f"ODR wind history unavailable: {exc}")
 
-    except Exception as e:
-        wind_data = None
-        wind_error = str(e).splitlines()[0][:100]
-        print(f"Wind retrieval failed: {wind_error}")
+    wind_data = None
+    if not wind_history.empty:
+        latest = wind_history.iloc[-1]
+        age = (now - latest["time"]).total_seconds() / 60
+        if -5 <= age <= WIND_MAX_AGE:
+            wind_data = {
+                "speed": float(latest["speed"]),
+                "direction": float(latest["direction"]),
+                "time": latest["time"],
+                "station": MOGT_STATION_NAME,
+            }
+
+    if wind_data is None:
+        try:
+            fallback = get_vedur_latest()
+            if not fallback.empty:
+                latest = fallback.sort_values("time").iloc[-1]
+                age = (now - latest["time"]).total_seconds() / 60
+                if -5 <= age <= WIND_MAX_AGE:
+                    wind_data = {
+                        "speed": float(latest["speed"]),
+                        "direction": float(latest["direction"]),
+                        "time": latest["time"],
+                        "station": WEATHER_STATION_NAME,
+                    }
+        except Exception as exc:
+            print(f"Þyrill wind unavailable: {exc}")
+
+    wind_error = None if wind_data is not None else "No recent wind observations"
+
+
+def wind_plot_series(now):
+    """Return ODR history on a 10-minute grid, leaving missing values as gaps."""
+    start = pd.Timestamp(now) - pd.Timedelta(hours=HISTORY_HOURS)
+    recent = wind_history.loc[wind_history["time"].between(start, pd.Timestamp(now))].copy()
+    if recent.empty:
+        return pd.DataFrame()
+
+    recent["bucket"] = recent["time"].dt.round("10min")
+    values = (recent.sort_values("time")
+              .drop_duplicates("bucket", keep="last")
+              .set_index("bucket")[["speed", "direction"]])
+    grid = pd.date_range(start.floor("10min"), pd.Timestamp(now).floor("10min"),
+                         freq="10min", tz="UTC")
+    return values.reindex(grid)
 
 
 def update_wind_label():
@@ -575,6 +608,8 @@ gs_left = fig.add_gridspec(
 axes = []
 for i in range(3):
     axes.append(fig.add_subplot(gs_left[i, 0], sharex=axes[0] if axes else None))
+ax_wind_speed = axes[1].twinx()  # Wind speed uses its own m/s scale
+ax_wind_speed.set_in_layout(False)
 
 # Right side
 # Numerical dashboard and polar plot
@@ -1118,6 +1153,50 @@ def split_direction_crossings(times, directions, breaks):
     return plot_times, plot_values
 
 
+def update_wind_timeseries(now):
+    """Overlay ODR wind direction (TO) and speed when history is available."""
+    ax_wind_speed.clear()
+    wind = wind_plot_series(now)
+    if wind.empty or not wind["speed"].notna().any():
+        ax_wind_speed.set_visible(False)
+        return
+
+    ax_wind_speed.set_visible(True)
+    times = wind.index.to_pydatetime()
+    speed = wind["speed"].to_numpy(dtype=float)
+    direction = (wind["direction"].to_numpy(dtype=float) + 180) % 360
+    direction[speed <= 0] = np.nan
+    plot_times, plot_angles = split_direction_crossings(
+        times, direction, np.zeros(len(times), dtype=bool)
+    )
+
+    axes[0].plot(plot_times, plot_angles, color='w', linestyle=":",
+                 lw=1.5, alpha=WIND_PLOT_ALPHA)
+    ax_wind_speed.plot(times, speed, color='w', linestyle=":",
+                       lw=1.5, alpha=WIND_PLOT_ALPHA)
+    ax_wind_speed.set_ylabel("Wind speed (m/s)", fontsize=8)
+    ax_wind_speed.yaxis.set_label_position("right")
+    ax_wind_speed.yaxis.set_ticks_position("right")
+    ax_wind_speed.tick_params(axis="y", right=True, labelright=True,
+                              left=False, labelleft=False)
+    ax_wind_speed.spines["right"].set_visible(True)
+    ax_wind_speed.set_xlim(now - dt.timedelta(hours=HISTORY_HOURS), now)
+    ax_wind_speed.set_ylim(0, max(1.0, 1.15 * np.nanmax(speed)))
+    ax_wind_speed.tick_params(axis="y", labelsize=8)
+    ax_wind_speed.grid(False)
+
+    legend = axes[1].legend(
+        [Line2D([], [], color='w', lw=1.3, linestyle=":", alpha=WIND_PLOT_ALPHA)],
+        ["Wind"],
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.025),
+        bbox_transform=axes[0].transAxes,
+        frameon=False, labelcolor=TEXT, fontsize=9,
+        handlelength=2.0, borderaxespad=0,
+    )
+    legend.set_in_layout(False)
+
+
 def update_timeseries(times, data, water_depth, now, visible):
     start_time = now - dt.timedelta(hours=HISTORY_HOURS)
     all_times = np.asarray(times)
@@ -1138,10 +1217,7 @@ def update_timeseries(times, data, water_depth, now, visible):
 
         if var == "water_depth":
             values = np.asarray(water_depth, dtype=float)[visible]
-            values = np.asarray(water_depth, dtype=float)[visible]
-            plot_times, plot_values = split_time_gaps(
-                times_visible, values, visible_gaps
-            )
+            plot_times, plot_values = split_time_gaps(times_visible, values, visible_gaps)
             ax.plot(plot_times, plot_values, color=GREEN, lw=1.35)
             recent = values[np.isfinite(values)]
             if recent.size:
@@ -1200,6 +1276,11 @@ def update_timeseries(times, data, water_depth, now, visible):
 
         ax.xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=8, tz=UTC))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=UTC))
+
+    update_wind_timeseries(now)
+
+    axes[-1].xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=8, tz=UTC))
+    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=UTC))
 
     velocity_legend = axes[0].legend(
         title="Current depth",
@@ -1463,7 +1544,7 @@ def refresh():
 
     now = utc_now()
 
-    refresh_wind()
+    refresh_wind(now)
     update_wind_label()
 
     try:
