@@ -1,0 +1,79 @@
+/* Responsive Overview layout. Applied after the existing dashboard styles. */
+html, body { width: 100%; height: 100%; }
+body { display: flex; height: 100vh; height: 100dvh; overflow: hidden; }
+.sidebar { flex-shrink: 0; }
+.content {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  padding: 8px 12px;
+  overflow: hidden;
+}
+.page {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.page[hidden] { display: none !important; }
+#overview-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+#overview-content > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+}
+/* Match the ~30% larger SVG labels in the surrounding web interface. */
+.sidebar { flex-basis: 205px; }
+.sidebar .nav-link { font-size: 18.2px; }
+.sidebar .sidebar-title { font-size: 15.6px; }
+.sidebar .sidebar-note { font-size: 14.3px; }
+.empty-message { font-size: 19.5px; }
+.empty-state h1 { font-size: 30px; }
+.empty-state p { font-size: 18.2px; }
+.empty-state .empty-label { font-size: 15.6px; }
+
+/* One-line wind readout on desktop; allow wrapping only on small screens. */
+#overview-wind-readout {
+  position: absolute;
+  right: 0;
+  bottom: 2.5%;
+  width: max-content;
+  max-width: calc(100% - 20px);
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: clamp(11.7px, 0.91vw, 15.6px);
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+}
+
+@media (max-width: 1100px) {
+  #overview-wind-readout {
+    width: 33%;
+    max-width: 33%;
+    white-space: normal;
+    overflow-wrap: normal;
+  }
+}
+
+/* Don't compress scientific plots until they become unreadable on phones. */
+@media (max-width: 800px) {
+  body { flex-direction: column; height: auto; min-height: 100dvh; overflow: auto; }
+  .sidebar { flex: none; width: 100%; }
+  .content { display: block; flex: none; width: 100%; overflow-x: auto; overflow-y: visible; }
+  .page { display: block; }
+  #overview-content { min-width: 800px; height: auto; }
+  #overview-content > svg { height: auto; }
+}
