@@ -16,8 +16,6 @@ python -m pip install -r requirements.txt
 
 For `adcp-py-toolbox` installation, see its [GitHub repository](https://github.com/hverholt/adcp-py-toolbox).
 
-The application uses Matplotlib's non-interactive backend and does not require a graphical desktop environment.
-
 ## Usage
 
 Run the dashboard in preview mode:
@@ -26,13 +24,13 @@ Run the dashboard in preview mode:
 python run_dashboard.py
 ```
 
-Continuously update the live dashboard:
+Or continuously update the live dashboard:
 
 ```cmd
 python run_dashboard.py --live
 ```
 
-Preview and live files are written to `output/preview/` and `output/live/`, respectively. Each contains a single `latest.html` file, including the Overview, Velocity profiles, and Amplitude profiles pages. A Current roses tab is also included for future use.
+Preview and live files are written to `output/preview/` and `output/live/`, respectively. Each contains a single `latest.html` file, including the Overview, Velocity profiles, and Amplitude profiles pages.
 
 ## Web access
 
@@ -42,13 +40,13 @@ Serve the live dashboard locally:
 python -m http.server 8000 --bind 127.0.0.1 --directory output/live
 ```
 
-Optionally expose the server using Tailscale Funnel:
+And optionally expose the server using Tailscale Funnel:
 
 ```cmd
 tailscale funnel --bg 8000
 ```
 
-Open `/latest.html` at the server address. The dashboard updates automatically while running in live mode, and the browser checks for refreshed content.
+Open `/latest.html` at the server address. The dashboard updates automatically while running in live mode, and the browser checks for refreshed content every 15 seconds (configurable).
 
 ## Configuration
 
