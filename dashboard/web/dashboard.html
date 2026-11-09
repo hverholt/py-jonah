@@ -4,27 +4,73 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="dashboard-generated" content="__DASHBOARD_VERSION__">
-  <title>ADCP live current monitor</title>
+  <title>Hvalfjörður ADCP Current monitor</title>
   <style>
 __INLINE_STYLE__
   </style>
 </head>
 <body>
-    <aside class="sidebar" aria-label="Dashboard navigation">
-      <nav class="nav">
-        <a class="nav-link" href="#overview" data-page="overview" aria-current="page">Overview</a>
-        <a class="nav-link" href="#profiles" data-page="profiles">Velocity profiles</a>
-        <a class="nav-link" href="#roses" data-page="roses">Current roses</a>
-      </nav>
-    </aside>
+  <aside class="sidebar" aria-label="Dashboard navigation">
+    <nav class="nav" aria-label="Pages">
+      <a class="nav-link" href="#overview" data-page="overview" aria-current="page">Overview</a>
+      <a class="nav-link" href="#profiles" data-page="profiles">Velocity profiles</a>
+      <a class="nav-link" href="#amplitude" data-page="amplitude">Amplitude profiles</a>
+      <a class="nav-link" href="#roses" data-page="roses">Current roses</a>
+    </nav>
+    <div class="sidebar-brand">
+      <div class="footer-brand">__LOGO__</div>
+      <div class="footer-maintainer">Maintained by <strong>__MAINTAINER__</strong><span>__MAINTAINER_EMAIL__</span></div>
+    </div>
+  </aside>
 
   <main class="content">
     <section class="page" id="page-overview" aria-label="Overview">
-      <div id="overview-content">
-__INLINE_SVG__
+      <div id="overview-content" class="dashboard">
+        <header class="dashboard-header">
+          <div class="dashboard-heading">
+            <h1>HVALFJÖRÐUR ADCP</h1>
+            <p class="dashboard-subheading">Live current monitor</p>
+          </div>
+          <div class="dashboard-status" aria-label="Data status and refresh times">
+            <div class="status-state"><span class="status-dot" style="background: __STATUS_COLOR__"></span><strong style="color: __STATUS_COLOR__">__STATUS_STATE__</strong><span class="status-age">__STATUS_AGE__</span></div>
+            <dl class="status-times">
+              <div><dt>Last data point</dt><dd>__LAST_DATA__</dd></div>
+              <div><dt>Last refresh</dt><dd>__LAST_REFRESH__</dd></div>
+              <div><dt>Next refresh</dt><dd>__NEXT_REFRESH__</dd></div>
+            </dl>
+          </div>
+        </header>
+
+        <div class="dashboard-grid">
+          <section class="timeseries-panel" aria-label="Current direction, current speed, and water depth">
+            <div class="timeseries-plot">__SVG_TIMESERIES__</div>
+          </section>
+          <div class="right-stack">
+            <section class="measurements-panel">
+              <h2>Latest measurements</h2>
+              <div class="measurement-list">__MEASUREMENTS__</div>
+            </section>
+            <section class="polar-panel" aria-label="Current direction and wind vectors">
+              <div class="polar-row">
+                <div class="polar-plot">__SVG_POLAR__</div>
+                __POLAR_LEGEND__
+              </div>
+            </section>
+          </div>
+        </div>
+
       </div>
     </section>
-    <section class="page empty-page" id="page-profiles" aria-label="Velocity profiles" hidden></section>
+    <section class="page" id="page-profiles" aria-label="Velocity profiles" hidden>
+      <div class="profiles-chart" id="profiles-content">
+        __SVG_PROFILES__
+      </div>
+    </section>
+    <section class="page" id="page-amplitude" aria-label="Amplitude profiles" hidden>
+      <div class="profiles-chart" id="amplitude-content">
+        __SVG_AMPLITUDE__
+      </div>
+    </section>
     <section class="page empty-page" id="page-roses" aria-label="Current roses" hidden></section>
   </main>
 

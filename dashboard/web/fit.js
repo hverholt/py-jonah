@@ -1,5 +1,5 @@
 // Reflow the embedded Matplotlib SVG when the browser or sidebar changes size.
-// The time-series graphs can stretch in x/y; text and the polar diagram cannot.
+// The time-series graphs can stretch in x/y, text and the polar diagram can not.
 (function () {
   const container = document.getElementById('overview-content');
   if (!container) return;

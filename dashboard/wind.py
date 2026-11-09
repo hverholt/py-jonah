@@ -1,8 +1,4 @@
-"""ODR wind history and Þyrill fallback for live wind observations.
-
-Only ODR Hvalfjörður is used for historical wind plots. Þyrill is used
-solely when there is no sufficiently recent ODR reading for the live arrow.
-"""
+"""ODR wind history and Þyrill fallback for live wind observations."""
 
 from io import StringIO
 from pathlib import Path

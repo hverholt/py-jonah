@@ -36,6 +36,8 @@ def update_dashboard(view, ds, filename, wind_state, now):
     currents, water_depth = data.extract_velocity(ds)
     status = data.get_data_status(last_data_time, now)
 
+    view["profile_dataset"] = ds
+    
     overview.update_view(
         view,
         times=times.to_pydatetime(),
@@ -104,6 +106,7 @@ def main():
     print(f"Dashboard output: {export_dir}")
 
     view = overview.create_view()
+    view["live_mode"] = args.live
     cached = None
     try:
         while True:
@@ -115,4 +118,5 @@ def main():
     except KeyboardInterrupt:
         print("\nDashboard stopped.")
     finally:
-        plt.close(view["fig"])
+        for fig in view["figures"].values():
+            plt.close(fig)

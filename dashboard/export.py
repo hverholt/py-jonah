@@ -1,25 +1,20 @@
-"""Publish the Matplotlib overview as one self-contained HTML file.
-
-The browser sidebar and its empty lazy-initialized tabs are defined in
-web/dashboard.html, web/style.css, and web/pages.js. The resulting latest.html
-embeds everything so it can be served exactly as before.
-"""
-
+"""Publish two scientific SVGs and HTML panels in one self-contained page."""
 import base64
+import html
 from io import BytesIO
 from pathlib import Path
+from matplotlib.legend import Legend
 import time
 
 import matplotlib.pyplot as plt
 
 from . import config as cfg
-
+from .plots import profiles
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
 
 def _atomic_write(path, content):
-    """Replace a published file only after its contents are fully written."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
@@ -27,108 +22,168 @@ def _atomic_write(path, content):
     temporary.replace(path)
 
 
-def _logo_bounds(view):
-    """Determine logo placement in figure fractions if a logo was loaded."""
-    artist = view.get("logo_artist")
-    if artist is None:
-        return None
-
-    # The overview may expose an explicit function to update its logo position.
-    update = view.get("update_logo_position")
-    if callable(update):
-        update()
-
-    fig = view["fig"]
-    height_px, width_px = artist.get_array().shape[:2]
-    fig_width, fig_height = fig.get_size_inches()
-    width = cfg.LOGO_SIZE
-    height = width * (height_px / width_px) * (fig_width / fig_height)
-    return (cfg.LOGO_POSITION[0], cfg.LOGO_POSITION[1] - height, width, height)
-
-
-def _figure_svg(view):
-    """Render overview as SVG text and embed the original vector logo."""
-    fig = view["fig"]
-    logo_artist = view.get("logo_artist")
-    logo_svg = view.get("logo_svg_bytes")
-    bounds = _logo_bounds(view)
-
+def _svg(fig, css_class=""):
     buffer = BytesIO()
-    was_visible = logo_artist.get_visible() if logo_artist is not None else False
-    if logo_artist is not None:
-        logo_artist.set_visible(False)
-    try:
-        with plt.rc_context({"svg.fonttype": "none", "svg.image_inline": True}):
-            fig.savefig(buffer, format="svg", facecolor=cfg.BG)
-    finally:
-        if logo_artist is not None:
-            logo_artist.set_visible(was_visible)
-
-    svg = buffer.getvalue().decode("utf-8")
-    start = svg.find("<svg ")
-    if start == -1:
-        raise ValueError("No SVG element found in exported dashboard")
-    svg = svg[start:]
-    svg = svg.replace("<svg ", '<svg xml:space="preserve" preserveAspectRatio="none" ', 1)
-
-    text_style = (
-        "text, tspan { "
-        f"font-family: '{cfg.FONT_FAMILY}', '{cfg.FONT_FALLBACK}', sans-serif !important; "
-        "white-space: pre !important; }"
+    with plt.rc_context({"svg.fonttype": "none", "svg.image_inline": True}):
+        extra_legends = [c for ax in fig.axes for c in ax.get_children() if isinstance(c, Legend)]
+        fig.savefig(buffer, format="svg", facecolor="none", bbox_inches="tight", pad_inches=0.08, bbox_extra_artists=extra_legends)
+    source = buffer.getvalue().decode("utf-8")
+    idx = source.find("<svg ")
+    if idx == -1:
+        raise ValueError("Matplotlib returned SVG without an <svg> element")
+    return source[idx:].replace(
+        "<svg ", f'<svg role="img" class="{css_class}" preserveAspectRatio="xMidYMid meet" ', 1
     )
-    tag_end = svg.find(">")
-    svg = svg[:tag_end + 1] + f'\n<style type="text/css">{text_style}</style>\n' + svg[tag_end + 1:]
 
-    if logo_svg is not None and bounds is not None:
-        left, bottom, width, height = bounds
-        fig_w, fig_h = fig.get_size_inches() * 72
-        x, y = left * fig_w, (1 - bottom - height) * fig_h
-        w, h = width * fig_w, height * fig_h
-        encoded = base64.b64encode(logo_svg).decode("ascii")
-        logo_tag = (
-            f'<image id="dashboard-logo" preserveAspectRatio="xMidYMid meet" '
-            f'x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
-            f'href="data:image/svg+xml;base64,{encoded}" />'
+
+
+def _timeseries_svgs(fig):
+    """Provide axes with different physical widths for different panel shapes.
+
+    CSS selects the best aspect ratio. Unlike SVG stretching, this keeps fonts
+    and labels correctly proportioned while filling wide panels.
+    """
+    original_size = fig.get_size_inches().copy()
+    # Nine widths spanning the original 10.5–17.5-inch range.
+    # Keep these names in sync with the @container rules in web/style.css.
+    variants = (
+        ("size-1", 10.500),
+        ("size-2", 11.375),
+        ("size-3", 12.250),
+        ("size-4", 13.125),
+        ("size-5", 14.000),
+        ("size-6", 14.875),
+        ("size-7", 15.750),
+        ("size-8", 16.625),
+        ("size-9", 17.500),
+    )
+    try:
+        return "".join(
+            _render_timeseries_width(fig, width, name, original_size[1])
+            for name, width in variants
         )
-        svg = svg.replace("</svg>", logo_tag + "\n</svg>", 1)
-    return svg
+    finally:
+        fig.set_size_inches(original_size, forward=False)
 
 
-def _html_page(svg):
-    """Construct the existing navigable, self-contained browser dashboard."""
-    html = (WEB_DIR / "dashboard.html").read_text(encoding="utf-8")
+def _render_timeseries_width(fig, width, name, height):
+    fig.set_size_inches(width, height, forward=False)
+    return _svg(fig, f"timeseries-variant timeseries-{name}")
+
+
+
+def _logo_tag():
+    path = Path(cfg.LOGO_SVG)
+    if not path.is_file():
+        return '<span class="footer-wordmark">RÖST</span>'
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f'<img class="footer-logo" alt="Röst" src="data:image/svg+xml;base64,{encoded}">'
+
+
+def _escape(value):
+    return html.escape(str(value), quote=True)
+
+
+def _measurements_html(view):
+    rows = []
+    for depth, speed, color in view.get("measurements", []):
+        rows.append(
+            '<div class="measurement-row">'
+            f'<span class="measurement-name" style="color:{_escape(color)}">'
+            f'{_escape(depth)} speed</span>'
+            f'<span class="measurement-value">{_escape(speed)}</span>'
+            '</div>'
+        )
+    rows.append(
+        '<div class="measurement-row measurement-depth">'
+        '<span class="measurement-name">Water depth</span>'
+        f'<span class="measurement-value">{_escape(view.get("water_depth", "—"))}</span>'
+        '</div>'
+    )
+    wind_label, wind_value = view.get("wind_measurement", ("Wind", "—"))
+    rows.append(
+        '<div class="measurement-row measurement-wind">'
+        f'<span class="measurement-name">{_escape(wind_label)}</span>'
+        f'<span class="measurement-value">{_escape(wind_value)}</span>'
+        '</div>'
+    )
+    return ''.join(rows)
+
+
+def _polar_legend_html():
+    items = [
+        f'<li><span class="legend-arrow" style="color:{_escape(color)}"></span>'
+        f'<span>{depth:g} m</span></li>'
+        for depth, color in zip(cfg.TARGET_DEPTHS, cfg.DEPTH_COLORS)
+    ]
+    items.append(
+        f'<li><span class="legend-arrow legend-wind" '
+        f'style="color:{_escape(cfg.WIND_COLOR)}"></span><span>Wind</span></li>'
+    )
+    return '<ul class="polar-legend" aria-label="Current and wind legend">' + ''.join(items) + '</ul>'
+
+
+def _profile_html(view, plot_type="velocity"):
+    ds = view.get("profile_dataset")
+    if ds is None:
+        return '<div class="empty-state">No profile data available.</div>'
+
+    fig = None
+    try:
+        fig = profiles.create_figure(ds, plot_type=plot_type)
+        return _svg(fig)
+    except Exception as exc:
+        print(f"{plot_type.capitalize()} profiles unavailable: {exc}")
+        return f'<div class="empty-state">{plot_type.capitalize()} profiles unavailable.</div>'
+    finally:
+        if fig is not None:
+            plt.close(fig)
+
+
+def _html_page(view):
+    doc = (WEB_DIR / "dashboard.html").read_text(encoding="utf-8")
     css = (WEB_DIR / "style.css").read_text(encoding="utf-8")
-    css += "\n" + (WEB_DIR / "fit.css").read_text(encoding="utf-8")
     js = (WEB_DIR / "pages.js").read_text(encoding="utf-8")
-    js += "\n" + (WEB_DIR / "fit.js").read_text(encoding="utf-8")
-
     colors = {
-        "bg": cfg.BG,
-        "panel": cfg.PANEL,
-        "grid": cfg.GRID,
-        "text": cfg.TEXT,
-        "muted": cfg.MUTED,
-        "cyan": cfg.CYAN,
+        "bg": cfg.BG, "panel": cfg.PANEL, "grid": cfg.GRID,
+        "text": cfg.TEXT, "muted": cfg.MUTED, "cyan": cfg.CYAN,
+        "green": cfg.GREEN, "orange": cfg.ORANGE, "red": cfg.RED,
         "font": f'"{cfg.FONT_FAMILY}"',
         "font-fallback": f'"{cfg.FONT_FALLBACK}"',
     }
-    theme = ":root {\n" + "".join(f"  --{name}: {value};\n" for name, value in colors.items()) + "}\n"
-    return (
-        html.replace("__DASHBOARD_VERSION__", str(time.time_ns()))
-        .replace("__INLINE_STYLE__", theme + css)
-        .replace("__INLINE_SVG__", svg)
-        .replace("__INLINE_SCRIPT__", js.replace("__WEB_POLL_MS__", str(cfg.WEB_POLL_SECONDS * 1000)))
-    )
+    theme = ':root {\n' + ''.join(f'--{name}: {value};\n' for name, value in colors.items()) + '}\n'
+    status = view.get("status", {})
+    state = status.get("state", "INITIALIZING")
+    age = status.get("age")
+    age_text = f"{age:.0f} s old" if age is not None else ""
+    substitutions = {
+        '__SVG_PROFILES__': _profile_html(view, 'velocity'),
+        '__SVG_AMPLITUDE__': _profile_html(view, 'amplitude'),
+        '__DASHBOARD_VERSION__': str(time.time_ns()),
+        '__INLINE_STYLE__': theme + css,
+        '__INLINE_SCRIPT__': js.replace('__WEB_POLL_MS__', str(cfg.WEB_POLL_SECONDS * 1000)),
+        '__SVG_TIMESERIES__': _timeseries_svgs(view['figures']['timeseries']),
+        '__SVG_POLAR__': _svg(view['figures']['polar']),
+        '__STATUS_STATE__': _escape(state),
+        '__STATUS_AGE__': _escape(age_text),
+        '__STATUS_COLOR__': _escape(status.get('color', cfg.ORANGE)),
+        '__LAST_DATA__': _escape(status.get('last_data', '—')),
+        '__LAST_REFRESH__': _escape(status.get('last_refresh', '—')),
+        '__NEXT_REFRESH__': _escape(status.get('next_refresh', '—')),
+        '__MEASUREMENTS__': _measurements_html(view),
+        '__POLAR_LEGEND__': _polar_legend_html(),
+        '__LOGO__': _logo_tag(),
+        '__MAINTAINER__': _escape(cfg.MAINTAINER_NAME),
+        '__MAINTAINER_EMAIL__': _escape(cfg.MAINTAINER_EMAIL),
+    }
+    for key, value in substitutions.items():
+        doc = doc.replace(key, value)
+    return doc
 
 
 def export_dashboard(view, export_dir):
-    """Write only latest.html for the Overview page.
-
-    Required ``view`` key: ``fig``. Optional keys: ``logo_artist`` and
-    ``logo_svg_bytes``. Does not generate plots for unopened pages.
-    """
-    svg = _figure_svg(view)
-    html = _html_page(svg)
-
-    output = Path(export_dir)
-    _atomic_write(output / "latest.html", html.encode("utf-8"))
+    """Write latest.html only, preserving preview/live paths."""
+    _atomic_write(
+        Path(export_dir) / "latest.html",
+        _html_page(view).encode("utf-8"),
+    )
