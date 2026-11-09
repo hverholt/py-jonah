@@ -2,7 +2,7 @@
 
 Python application for generating and continuously updating a live dashboard of acoustic Doppler current profiler (ADCP) measurements. It combines incoming telemetry, converts the data to NetCDF using [adcp-py-toolbox](https://github.com/hverholt/adcp-py-toolbox), and visualizes horizontal current velocities at selected depths below the sea surface.
 
-The dashboard displays velocity time series, current direction and speed, pressure-derived water depth, and nearby wind observations. It produces a live Matplotlib display and standalone HTML, SVG, and PNG outputs that can be served through a web browser.
+The dashboard displays velocity time series, current direction and speed, pressure-derived water depth, nearby wind observations, and velocity and amplitude profiles. It produces a standalone, self-contained HTML dashboard with embedded Matplotlib plots that can be served through a web browser.
 
 Currently used to monitor a **Nortek Signature1000 ADCP** at **Miðsandur pier, Hvalfjörður, Iceland**, for **Röst Marine Research Center** (https://www.rostrannsoknir.is).
 
@@ -16,27 +16,27 @@ python -m pip install -r requirements.txt
 
 For `adcp-py-toolbox` installation, see its [GitHub repository](https://github.com/hverholt/adcp-py-toolbox).
 
-The application uses Matplotlib's Qt backend and requires a graphical desktop environment.
+The application uses Matplotlib's non-interactive backend and does not require a graphical desktop environment.
 
 ## Usage
 
 Run the dashboard in preview mode:
 
 ```cmd
-python plot_adcp_dashboard.py
+python run_dashboard.py
 ```
 
-Publish updated dashboard files:
+Continuously update the live dashboard:
 
 ```cmd
-python plot_adcp_dashboard.py --publish
+python run_dashboard.py --live
 ```
 
-Preview and published files are written to `output/preview/` and `output/live/`, respectively. Each contains `latest.html`, `latest.svg`, and `latest.png`.
+Preview and live files are written to `output/preview/` and `output/live/`, respectively. Each contains a single `latest.html` file, including the Overview, Velocity profiles, and Amplitude profiles pages. A Current roses tab is also included for future use.
 
 ## Web access
 
-Serve the published dashboard locally:
+Serve the live dashboard locally:
 
 ```cmd
 python -m http.server 8000 --bind 127.0.0.1 --directory output/live
@@ -48,11 +48,11 @@ Optionally expose the server using Tailscale Funnel:
 tailscale funnel --bg 8000
 ```
 
-Open `/latest.html` at the server address. The dashboard automatically refreshes its outputs while running.
+Open `/latest.html` at the server address. The dashboard updates automatically while running in live mode, and the browser checks for refreshed content.
 
 ## Configuration
 
-Configure the telemetry input directory, target depths, refresh intervals, and display settings near the top of `plot_adcp_dashboard.py`.
+Configure the telemetry input directory, target depths, refresh intervals, wind stations, profile color limits, and display settings in `dashboard/config.py`.
 
 ## Collaboration
 
