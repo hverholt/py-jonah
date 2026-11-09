@@ -38,6 +38,7 @@ MAINTAINER_NAME = "Sindri Bernholt"
 MAINTAINER_EMAIL = "sindri@rostrannsoknir.is"
 FAVICON_SVG = str(ROOT / "assets" / "logos" / "rost-logo-no-text-50px-green.svg")
 LOGO_SVG = str(ROOT / "assets" / "logos" / "rost-logo-icelandic-white.svg")
+UNIVERSITY_LOGO_SVG = str(ROOT / "assets" / "logos" / "university-of-iceland-white.svg")
 
 # ADCP measurements
 TARGET_DEPTHS = (2, 5, 10)  # metres below surface

@@ -147,7 +147,8 @@ def update_timeseries(view, times, currents, water_depth, now, visible, wind_sta
                     zorder=layer + 1
                 )
 
-        ax.set_ylabel(f"{name} ({unit})", labelpad=10, fontsize=cfg.WEB_FONT_REGULAR_PX)
+        ax.set_ylabel(f"{name} ({unit})", labelpad=2, fontsize=cfg.WEB_FONT_REGULAR_PX)
+        #ax.yaxis.set_label_coords(-0.07, 0.5)
         ax.set_xlim(start_time, now)
         ax.grid(alpha=0.5, linewidth=0.6)
         ax.tick_params(length=0, pad=7, labelsize=cfg.WEB_FONT_REGULAR_PX)
@@ -193,5 +194,5 @@ def update_timeseries(view, times, currents, water_depth, now, visible, wind_sta
     for ax in axes[:-1]:
         ax.tick_params(labelbottom=False)
     axes[-1].set_xlabel("Time (UTC)", color=cfg.TEXT, fontsize=cfg.WEB_FONT_REGULAR_PX)
-    axes[-1].xaxis.set_label_coords(0.47, -0.19)
+    axes[-1].xaxis.set_label_coords(0.47, -0.24)
 

@@ -77,12 +77,19 @@ def _timeseries_variant_css(height):
 
 
 
-def _logo_tag():
-    path = Path(cfg.LOGO_SVG)
+def _logo_tag(svg_path=None, alt="Röst"):
+    path = Path(cfg.LOGO_SVG if svg_path is None else svg_path)
+
     if not path.is_file():
-        return '<span class="footer-wordmark">RÖST</span>'
+        if svg_path is None:
+            return '<span class="footer-wordmark">RÖST</span>'
+        raise FileNotFoundError(f"Logo not found: {path}")
+
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f'<img class="footer-logo" alt="Röst" src="data:image/svg+xml;base64,{encoded}">'
+    return (
+        f'<img class="footer-logo" alt="{html.escape(alt, quote=True)}" '
+        f'src="data:image/svg+xml;base64,{encoded}">'
+    )
 
 
 def _favicon_url():
@@ -189,6 +196,7 @@ def _html_page(view):
         '__MEASUREMENTS__': _measurements_html(view),
         '__POLAR_LEGEND__': _polar_legend_html(),
         '__LOGO__': _logo_tag(),
+        '__UNIVERSITY_LOGO__': _logo_tag(cfg.UNIVERSITY_LOGO_SVG, 'University of Iceland'),
         '__FAVICON__': _favicon_url(),
         '__MAINTAINER__': _escape(cfg.MAINTAINER_NAME),
         '__MAINTAINER_EMAIL__': _escape(cfg.MAINTAINER_EMAIL),

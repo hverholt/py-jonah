@@ -121,18 +121,30 @@ body { display: flex; min-height: 100dvh; font-family: var(--font), var(--font-f
 .legend-arrow::after { content: ""; position: absolute; right: -1px; top: -5px; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 7px solid currentColor; }
 .legend-wind { border-top-style: dashed; }
 
-/* Brand stays at the bottom of the sidebar rather than the plot area. */
+/* Brand at the bottom of the sidebar */
 .sidebar-brand {
   margin-top: auto;
   padding: 16px 9px 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: 35px;
   min-width: 0;
 }
+.sidebar-logos {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
 .footer-brand { flex: 0 0 auto; display: flex; align-items: center; min-height: 38px; }
-.footer-logo { display: block; width: auto; height: 38px; max-width: 220px; object-fit: contain; }
+.footer-logo {
+    display: block;
+    width: auto;
+    height: 55px;
+    max-width: 160px;
+    object-fit: contain;
+}
 .footer-wordmark { font-weight: 800; letter-spacing: .2em; font-size: var(--font-heading); }
 .footer-maintainer { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; color: var(--muted); font-size: var(--font-regular); line-height: 1.4; }
 .footer-maintainer strong { color: var(--text); font-weight: 550; }
@@ -158,7 +170,41 @@ body { display: flex; min-height: 100dvh; font-family: var(--font), var(--font-f
   .sidebar { display: contents; }
   .nav { order: 0; flex-flow: row wrap; gap: 12px; padding: 10px 14px; }
   .content { order: 1; }
-  .sidebar-brand { order: 2; margin-top: 0; padding: 20px 20px 24px; }
+  .sidebar-brand {
+    order: 2;
+    margin-top: 0;
+    padding: 20px 20px 24px;
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 30px;
+  }
+  .footer-maintainer {
+    flex: 0 1 auto;
+    min-width: 0;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .sidebar-logos {
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 30px;
+    width: 100%;
+  }
+  .sidebar-logos .footer-brand {
+    flex: 0 1 auto;
+    width: auto;
+    min-height: 0;
+    justify-content: flex-end;
+  }
+  .sidebar-logos .footer-logo {
+    width: auto;
+    height: 40px;
+    max-width: 150px;
+  }
+  .footer-maintainer span {
+    overflow-wrap: anywhere;
+  }
   .nav-link { font-size: var(--font-regular); padding: 6px 0; }
   .dashboard { padding: 16px 10px; gap: 12px; }
   .status-times { gap: 10px 15px; }
