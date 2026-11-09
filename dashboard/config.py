@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # ADCP telemetry source
-INPUT_DIR = r"C:\Users\Nortek1000\Documents\Nortek\Deployment\Online"
+INPUT_DIR = r"C:\Users\Nortek1000\Desktop\ADCP\adcp-data\raw\telemetry\live"
 
 # Intermediate and processed data
 TXT_FILE = str(ROOT / "data" / "interim" / "latest.txt")
