@@ -228,6 +228,13 @@ body { display: flex; min-height: 100dvh; font-family: var(--font), var(--font-f
   font-size: var(--svg-font-regular, 11.2px) !important;
 }
 
+.plot-loading {
+    color: var(--muted);
+    font-size: var(--font-regular);
+    text-align: center;
+    padding: 20px;
+}
+
 /* Velocity profiles */
 .profiles-chart {
   width: 100%;

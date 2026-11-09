@@ -1,12 +1,13 @@
-"""Publish two scientific SVGs and HTML panels in one self-contained page."""
+"""Export HTML and lazily loaded Matplotlib SVG fragments."""
 import base64
 import html
+import shutil
+import time
 from io import BytesIO
 from pathlib import Path
-from matplotlib.legend import Legend
-import time
 
 import matplotlib.pyplot as plt
+from matplotlib.legend import Legend
 
 from . import config as cfg
 from .plots import profiles
@@ -160,7 +161,7 @@ def _profile_html(view, plot_type="velocity"):
             plt.close(fig)
 
 
-def _html_page(view):
+def _html_page(view, plot_paths, version):
     doc = (WEB_DIR / "dashboard.html").read_text(encoding="utf-8")
     css = (WEB_DIR / "style.css").read_text(encoding="utf-8")
     js = (WEB_DIR / "pages.js").read_text(encoding="utf-8")
@@ -178,15 +179,15 @@ def _html_page(view):
     age = status.get("age")
     age_text = f"{age:.0f} s old" if age is not None else ""
     substitutions = {
-        '__SVG_PROFILES__': _profile_html(view, 'velocity'),
-        '__SVG_AMPLITUDE__': _profile_html(view, 'amplitude'),
-        '__DASHBOARD_VERSION__': str(time.time_ns()),
+        '__PLOT_POLAR__': plot_paths['polar'],
+        '__PLOT_TIMESERIES__': plot_paths['timeseries'],
+        '__PLOT_PROFILES__': plot_paths['profiles'],
+        '__PLOT_AMPLITUDE__': plot_paths['amplitude'],
+        '__DASHBOARD_VERSION__': version,
         '__INLINE_STYLE__': theme + css + "\n" + _timeseries_variant_css(
             view['figures']['timeseries'].get_size_inches()[1]
         ),
         '__INLINE_SCRIPT__': js.replace('__WEB_POLL_MS__', str(cfg.WEB_POLL_SECONDS * 1000)),
-        '__SVG_TIMESERIES__': _timeseries_svgs(view['figures']['timeseries']),
-        '__SVG_POLAR__': _svg(view['figures']['polar']),
         '__STATUS_STATE__': _escape(state),
         '__STATUS_AGE__': _escape(age_text),
         '__STATUS_COLOR__': _escape(status.get('color', cfg.ORANGE)),
@@ -207,8 +208,36 @@ def _html_page(view):
 
 
 def export_dashboard(view, export_dir):
-    """Write latest.html only, preserving preview/live paths."""
+    """Publish plot fragments before atomically updating the HTML entry point."""
+    export_dir = Path(export_dir)
+    version = str(time.time_ns())
+    assets_dir = export_dir / "plots" / version
+
+    renderers = {
+        "polar": lambda: _svg(view["figures"]["polar"]),
+        "timeseries": lambda: _timeseries_svgs(view["figures"]["timeseries"]),
+        "profiles": lambda: _profile_html(view, "velocity"),
+        "amplitude": lambda: _profile_html(view, "amplitude"),
+    }
+
+    plot_paths = {}
+    for name, render in renderers.items():
+        filename = f"{name}.html"
+        _atomic_write(assets_dir / filename, render().encode("utf-8"))
+        plot_paths[name] = f"plots/{version}/{filename}"
+
     _atomic_write(
-        Path(export_dir) / "latest.html",
-        _html_page(view).encode("utf-8"),
+        export_dir / "latest.html",
+        _html_page(view, plot_paths, version).encode("utf-8"),
     )
+
+    generations = sorted(
+        (path for path in (export_dir / "plots").iterdir()
+         if path.is_dir() and path.name.isdigit()),
+        key=lambda path: int(path.name),
+    )
+    for old in generations[:-cfg.PLOT_ASSET_GENERATIONS_TO_KEEP]:
+        try:
+            shutil.rmtree(old)
+        except OSError as exc:
+            print(f"Could not remove old plot assets {old}: {exc}")

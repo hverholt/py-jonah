@@ -14,6 +14,7 @@ WIND_HISTORY_FILE = str(ROOT / "data" / "processed" / "wind_history.csv")
 
 # Dashboard output and typography
 EXPORT_DIR = ROOT / "output"
+PLOT_ASSET_GENERATIONS_TO_KEEP = 3
 FONT_FAMILY = "DejaVu Sans"
 FONT_FALLBACK = "Arial"
 WEB_FONT_REGULAR_PX = 12

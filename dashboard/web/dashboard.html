@@ -47,7 +47,7 @@ __INLINE_STYLE__
 
         <div class="dashboard-grid">
           <section class="timeseries-panel" aria-label="Current direction, current speed, and water depth">
-            <div class="timeseries-plot">__SVG_TIMESERIES__</div>
+            <div class="timeseries-plot" id="timeseries-content" data-src="__PLOT_TIMESERIES__"><div class="plot-loading" role="status">Loading time series…</div></div>
           </section>
           <div class="right-stack">
             <section class="measurements-panel">
@@ -56,7 +56,7 @@ __INLINE_STYLE__
             </section>
             <section class="polar-panel" aria-label="Current direction and wind vectors">
               <div class="polar-row">
-                <div class="polar-plot">__SVG_POLAR__</div>
+                <div class="polar-plot" id="polar-content" data-src="__PLOT_POLAR__"><div class="plot-loading" role="status">Loading polar plot…</div></div>
                 __POLAR_LEGEND__
               </div>
             </section>
@@ -66,14 +66,10 @@ __INLINE_STYLE__
       </div>
     </section>
     <section class="page" id="page-profiles" aria-label="Velocity profiles" hidden>
-      <div class="profiles-chart" id="profiles-content">
-        __SVG_PROFILES__
-      </div>
+      <div class="profiles-chart" id="profiles-content" data-src="__PLOT_PROFILES__"><div class="plot-loading" role="status">Loading velocity profiles…</div></div>
     </section>
     <section class="page" id="page-amplitude" aria-label="Amplitude profiles" hidden>
-      <div class="profiles-chart" id="amplitude-content">
-        __SVG_AMPLITUDE__
-      </div>
+      <div class="profiles-chart" id="amplitude-content" data-src="__PLOT_AMPLITUDE__"><div class="plot-loading" role="status">Loading amplitude profiles…</div></div>
     </section>
     <section class="page empty-page" id="page-roses" aria-label="Current roses" hidden></section>
   </main>
