@@ -1,9 +1,8 @@
-# Back up stable Nortek telemetry files to a Google Drive for desktop folder.
-# Run every five minutes using Windows Task Scheduler.
+# Copy new and changed telemetry files to Google Drive for desktop.
+# Run every five minutes with Windows Task Scheduler.
 
-$Source = 'C:\Users\Nortek1000\Documents\Nortek\Deployment\Online'
+$Source = 'C:\Users\Nortek1000\Desktop\ADCP\adcp-data\raw\telemetry\live'
 $Destination = 'G:\My Drive\hval'
-$StableMinutes = 0
 $CheckSeconds = 1
 
 $ErrorActionPreference = 'Stop'
@@ -12,66 +11,66 @@ if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
     throw "Source folder not found: $Source"
 }
 if (-not (Test-Path -LiteralPath $Destination -PathType Container)) {
-    throw "Google Drive folder not found: $Destination (check the drive letter and sign-in)"
+    throw "Google Drive folder not found: $Destination"
 }
 
-# Record file sizes and modification times, then check again after a short pause.
+# Only copy files whose size and modification time stay unchanged during the check.
 $initial = @{}
-Get-ChildItem -LiteralPath $Source -Filter 'Terminal_*.txt' -File | ForEach-Object {
+Get-ChildItem -LiteralPath $Source -File -Recurse | ForEach-Object {
     $initial[$_.FullName] = @($_.Length, $_.LastWriteTimeUtc.Ticks)
 }
-
 Start-Sleep -Seconds $CheckSeconds
 
+$sourceRoot = $Source.TrimEnd('\') + '\'
 $copied = 0
 $skipped = 0
 $failed = 0
 
 foreach ($path in $initial.Keys) {
-    $file = Get-Item -LiteralPath $path -ErrorAction SilentlyContinue
-    if ($null -eq $file) { $skipped++; continue }
+    try {
+        $file = Get-Item -LiteralPath $path -ErrorAction SilentlyContinue
+        $was = $initial[$path]
 
-    $was = $initial[$path]
-    $stable = ($file.Length -eq $was[0]) -and ($file.LastWriteTimeUtc.Ticks -eq $was[1])
-    $oldEnough = $file.LastWriteTimeUtc -le (Get-Date).ToUniversalTime().AddMinutes(-$StableMinutes)
-    if (-not ($stable -and $oldEnough)) {
-        Write-Host "Still changing or recently modified: $($file.Name)"
-	$skipped++
-        continue
-    }
+        if ($null -eq $file -or $file.Length -ne $was[0] -or
+            $file.LastWriteTimeUtc.Ticks -ne $was[1]) {
+            $skipped++
+            continue
+        }
 
-    # Avoid starting Robocopy for files already backed up.
-    $destinationFile = Get-Item -LiteralPath (Join-Path $Destination $file.Name) -ErrorAction SilentlyContinue
-    if ($null -ne $destinationFile -and
-        $destinationFile.Length -eq $file.Length -and
-        [Math]::Abs(($destinationFile.LastWriteTimeUtc - $file.LastWriteTimeUtc).TotalSeconds) -le 2) {
-	Write-Host "Already backed up: $($file.Name)"
-        $skipped++
-        continue
-    }
+        $relativePath = $path.Substring($sourceRoot.Length)
+        $targetPath = Join-Path $Destination $relativePath
+        $target = Get-Item -LiteralPath $targetPath -ErrorAction SilentlyContinue
 
-    # Robocopy additionally skips matching files and preserves their timestamps.
-    & robocopy.exe $Source $Destination $file.Name /FFT /R:2 /W:5 /NP /NFL /NDL /NJH /NJS
-    $code = $LASTEXITCODE
+        if ($null -ne $target -and $target.Length -eq $file.Length -and
+            [Math]::Abs(($target.LastWriteTimeUtc - $file.LastWriteTimeUtc).TotalSeconds) -le 2) {
+            $skipped++
+            continue
+        }
 
-    if ($code -ge 8) {
-        Write-Warning "Copy failed: $($file.Name) (Robocopy exit code $code)"
+        $targetDirectory = Split-Path -Parent $targetPath
+        New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
+
+        & robocopy.exe ($file.DirectoryName) $targetDirectory ($file.Name) /FFT /R:2 /W:5 /NP /NFL /NDL /NJH /NJS
+        $code = $LASTEXITCODE
+
+        if ($code -ge 8) {
+            Write-Warning "Copy failed: $relativePath (Robocopy code $code)"
+            $failed++
+        } elseif ($code -band 1) {
+            Write-Host "Backed up: $relativePath"
+            $copied++
+        } else {
+            $skipped++
+        }
+
+        $after = Get-Item -LiteralPath $path -ErrorAction SilentlyContinue
+        if ($null -ne $after -and ($after.Length -ne $was[0] -or
+            $after.LastWriteTimeUtc.Ticks -ne $was[1])) {
+            Write-Warning "Changed during backup; will recheck next run: $relativePath"
+        }
+    } catch {
+        Write-Warning "Backup error for $($path): $_"
         $failed++
-    } elseif ($code -band 1) {
-        Write-Host "Copied new/changed file: $($file.Name)"
-        $copied++
-    } else {
-        $skipped++
-    }
-
-    # If the instrument updated this file while it was being copied,
-    # the next scheduled run will copy the changed version again.
-    $after = Get-Item -LiteralPath $path -ErrorAction SilentlyContinue
-    if ($null -ne $after -and (
-        $after.Length -ne $file.Length -or
-        $after.LastWriteTimeUtc.Ticks -ne $file.LastWriteTimeUtc.Ticks
-    )) {
-        Write-Warning "Source changed during backup; will recheck next run: $($file.Name)"
     }
 }
 
