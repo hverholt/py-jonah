@@ -4,21 +4,21 @@ Matplotlib owns each scientific figure. HTML/CSS independently position the
 figures, measurements, status, header and footer.
 """
 import datetime as dt
-
 import matplotlib.pyplot as plt
-import numpy as np
-
 from .. import config as cfg, data
 from . import polar, timeseries
 
 
 def create_view():
     """Create two figures without opening a desktop window."""
-    plt.rcParams.update({**cfg.PLOT_STYLE, "font.size": 12})
+    plt.rcParams.update({**cfg.PLOT_STYLE, "font.size": cfg.WEB_FONT_REGULAR_PX})
 
     # Original shared-x, vertically stacked current/current/depth layout.
     # Figure coordinates apply only *within* this one SVG.
-    series_fig = plt.figure(figsize=(10.5, 8.0), facecolor=cfg.BG)
+    series_fig = plt.figure(
+        figsize=(cfg.TIMESERIES_EXPORT_WIDTHS[0], cfg.TIMESERIES_FIGURE_HEIGHT),
+        facecolor=cfg.BG,
+    )
     gs = series_fig.add_gridspec(
         3, 1, left=0.092, right=0.895, top=0.945, bottom=0.092,
         height_ratios=(1, 1, 0.60), hspace=0.15,
@@ -32,7 +32,7 @@ def create_view():
     ax_wind_speed.set_in_layout(False)
 
     # No legend inside the SVG: its HTML counterpart sits to the right.
-    polar_fig = plt.figure(figsize=(5.8, 5.8), facecolor=cfg.BG)
+    polar_fig = plt.figure(figsize=cfg.POLAR_FIGURE_SIZE, facecolor=cfg.BG)
     ax_polar = polar_fig.add_axes([0.035, 0.035, 0.93, 0.86], projection="polar")
 
     view = {
@@ -45,7 +45,6 @@ def create_view():
         "status": {
             "state": "INITIALIZING", "color": cfg.ORANGE, "age": None,
             "last_data": "—", "last_refresh": "—", "next_refresh": "—",
-            "filename": "Waiting for telemetry…",
         },
         "measurements": [],
         "wind_measurement": ("Wind", "—"),
@@ -55,6 +54,7 @@ def create_view():
         view["map_image"] = polar.get_map_image(
             cfg.WMS_URL, cfg.WMS_LAYERS, cfg.MAP_LAT, cfg.MAP_LON,
             width=cfg.MAP_WIDTH,
+            resolution=cfg.MAP_IMAGE_RESOLUTION,
         )
     except Exception as exc:
         print(f"Could not load basemap: {exc}")
@@ -62,7 +62,7 @@ def create_view():
 
 
 def update_view(view, *, times, currents, water_depth, now, visible,
-                wind_state, filename, last_data_time, status):
+                wind_state, last_data_time, status):
     """Update science plots and plain HTML numerical/status data."""
     timeseries.update_timeseries(
         view, times, currents, water_depth, now, visible, wind_state,
@@ -87,7 +87,6 @@ def update_view(view, *, times, currents, water_depth, now, visible,
             data.format_time(now + dt.timedelta(seconds=cfg.REFRESH_SECONDS))
             if view.get("live_mode") else "Not scheduled"
         ),
-        "filename": filename,
     }
 
     # Wind belongs to the numerical panel alongside current speed and depth.
@@ -108,5 +107,4 @@ def show_error(view, message):
     view["status"].update({
         "state": "UPDATE ERROR",
         "color": cfg.RED,
-        "filename": f"Update error: {str(message)[:100]}",
     })

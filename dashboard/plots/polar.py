@@ -1,7 +1,6 @@
 """Polar current vectors and optional WMS basemap (one independent figure)."""
 import numpy as np
 from io import BytesIO
-import matplotlib.pyplot as plt
 from matplotlib.image import BboxImage
 from PIL import Image
 from pyproj import Transformer
@@ -72,7 +71,7 @@ def update_polar(view, currents, visible, wind_data):
 
     # Cardinal labels sit just inside the circle instead of outside it.
     ax.set_thetagrids([0, 90, 180, 270], labels=["N", "E", "S", "W"])
-    ax.tick_params(colors=cfg.TEXT, labelsize=11)
+    ax.tick_params(colors=cfg.TEXT, labelsize=cfg.WEB_FONT_REGULAR_PX)
     ax.tick_params(axis="x", pad=-19)
     ax.grid(color="white", alpha=0.25, linewidth=0.7)
     ax.spines["polar"].set_color(cfg.GRID)
@@ -127,4 +126,4 @@ def update_polar(view, currents, visible, wind_data):
     ax.set_rlabel_position(135)
     for label in ax.get_yticklabels():
         label.set_color(cfg.MUTED)
-        label.set_fontsize(12)
+        label.set_fontsize(cfg.WEB_FONT_REGULAR_PX)

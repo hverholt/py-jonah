@@ -28,8 +28,7 @@ function showPage(name) {
 // CSS pixels on each resize so the apparent size matches the HTML exactly.
 function syncPlotFonts() {
   const styles = getComputedStyle(document.documentElement);
-  const regular = parseFloat(styles.getPropertyValue('--font-regular')) || 11.2;
-  const heading = parseFloat(styles.getPropertyValue('--font-heading')) || 16.8;
+  const regular = parseFloat(styles.getPropertyValue('--font-regular')) || 12;
 
   for (const svg of document.querySelectorAll('.timeseries-plot svg, .polar-plot svg, .profiles-chart svg')) {
     if (svg.getBoundingClientRect().width === 0) continue; // hidden variants
@@ -39,10 +38,6 @@ function syncPlotFonts() {
     if (!Number.isFinite(pixelsPerUnit) || pixelsPerUnit <= 0) continue;
 
     svg.style.setProperty('--svg-font-regular', `${regular / pixelsPerUnit}px`);
-    svg.style.setProperty('--svg-font-heading', `${heading / pixelsPerUnit}px`);
-    for (const text of svg.querySelectorAll('text')) {
-      text.classList.toggle('svg-heading', text.textContent.trim() === 'CURRENT DIRECTION');
-    }
   }
 }
 

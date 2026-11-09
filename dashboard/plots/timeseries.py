@@ -33,13 +33,13 @@ def update_wind_timeseries(view, now, wind_state):
 
     axes[0].plot(
         plot_times, plot_angles, color="w", linestyle=":",
-        lw=1.5, alpha=cfg.WIND_PLOT_ALPHA,
+        lw=cfg.WIND_PLOT_LW, alpha=cfg.WIND_PLOT_ALPHA,
     )
     ax_wind_speed.plot(
         times, speed, color="w", linestyle=":",
-        lw=1.5, alpha=cfg.WIND_PLOT_ALPHA,
+        lw=cfg.WIND_PLOT_LW, alpha=cfg.WIND_PLOT_ALPHA,
     )
-    ax_wind_speed.set_ylabel("Wind speed (m/s)", fontsize=12)
+    ax_wind_speed.set_ylabel("Wind speed (m/s)", fontsize=cfg.WEB_FONT_REGULAR_PX)
     ax_wind_speed.yaxis.set_label_position("right")
     ax_wind_speed.yaxis.set_ticks_position("right")
     ax_wind_speed.tick_params(
@@ -52,7 +52,7 @@ def update_wind_timeseries(view, now, wind_state):
         width=0.8,
         color=cfg.GRID,
         labelcolor=cfg.MUTED,
-        labelsize=12,
+        labelsize=cfg.WEB_FONT_REGULAR_PX,
         pad=7,
     )
     ax_wind_speed.spines["right"].set_visible(True)
@@ -62,11 +62,11 @@ def update_wind_timeseries(view, now, wind_state):
     ax_wind_speed.grid(False)
 
     legend = axes[1].legend(
-        [Line2D([], [], color="w", lw=1.3, linestyle=":", alpha=cfg.WIND_PLOT_ALPHA)],
+        [Line2D([], [], color="w", lw=cfg.WIND_PLOT_LW, linestyle=":", alpha=cfg.WIND_PLOT_ALPHA)],
         ["Wind"], loc="lower center",
         bbox_to_anchor=(0.5, 1.025),
         bbox_transform=axes[0].transAxes,
-        frameon=False, labelcolor=cfg.TEXT, fontsize=12,
+        frameon=False, labelcolor=cfg.TEXT, fontsize=cfg.WEB_FONT_REGULAR_PX,
         handlelength=2.0, borderaxespad=0,
     )
     legend.set_in_layout(True)
@@ -95,7 +95,7 @@ def update_timeseries(view, times, currents, water_depth, now, visible, wind_sta
             plot_times, plot_values = data.split_time_gaps(
                 times_visible, values, visible_gaps,
             )
-            ax.plot(plot_times, plot_values, color=cfg.GREEN, lw=1.35)
+            ax.plot(plot_times, plot_values, color=cfg.GREEN, lw=cfg.DEPTH_PLOT_LW)
             recent = values[np.isfinite(values)]
             if recent.size:
                 lo, hi = recent.min(), recent.max()
@@ -137,20 +137,20 @@ def update_timeseries(view, times, currents, water_depth, now, visible, wind_sta
                     )
 
                 ax.plot(
-                    raw_times, raw_values, color=color, lw=1.3,
+                    raw_times, raw_values, color=color, lw=cfg.RAW_LINE_LW,
                     alpha=cfg.RAW_LINE_ALPHA, solid_joinstyle="bevel",
                     zorder=layer
                 )
                 ax.plot(
-                    mean_times, mean_values, color=color, lw=1.5,
+                    mean_times, mean_values, color=color, lw=cfg.MEAN_LINE_LW,
                     alpha=1.0, solid_joinstyle="bevel", label=f"{depth:g} m",
                     zorder=layer + 1
                 )
 
-        ax.set_ylabel(f"{name} ({unit})", labelpad=10, fontsize=12)
+        ax.set_ylabel(f"{name} ({unit})", labelpad=10, fontsize=cfg.WEB_FONT_REGULAR_PX)
         ax.set_xlim(start_time, now)
         ax.grid(alpha=0.5, linewidth=0.6)
-        ax.tick_params(length=0, pad=7, labelsize=12)
+        ax.tick_params(length=0, pad=7, labelsize=cfg.WEB_FONT_REGULAR_PX)
         if var == "direction":
             ax.set_ylim(0, 360)
             ax.set_yticks(
@@ -172,7 +172,7 @@ def update_timeseries(view, times, currents, water_depth, now, visible, wind_sta
     velocity_legend = axes[0].legend(
         title="Current depth", alignment="right", loc="lower right",
         bbox_to_anchor=(1.0, 1.025), ncol=len(cfg.TARGET_DEPTHS),
-        frameon=False, labelcolor=cfg.TEXT, fontsize=12,
+        frameon=False, labelcolor=cfg.TEXT, fontsize=cfg.WEB_FONT_REGULAR_PX,
         handlelength=2.0, columnspacing=1.2, borderaxespad=0,
     )
     axes[0].add_artist(velocity_legend)
@@ -180,18 +180,18 @@ def update_timeseries(view, times, currents, water_depth, now, visible, wind_sta
 
     style_legend = axes[0].legend(
         [
-            Line2D([], [], color=cfg.DEPTH_COLORS[0], lw=1.3, alpha=cfg.RAW_LINE_ALPHA),
-            Line2D([], [], color=cfg.DEPTH_COLORS[0], lw=1.5),
+            Line2D([], [], color=cfg.DEPTH_COLORS[0], lw=cfg.RAW_LINE_LW, alpha=cfg.RAW_LINE_ALPHA),
+            Line2D([], [], color=cfg.DEPTH_COLORS[0], lw=cfg.MEAN_LINE_LW),
         ],
         ["Raw", f"{cfg.RUNNING_MEAN_SAMPLES}-sample mean"],
         loc="lower left", bbox_to_anchor=(0.0, 1.025), ncol=1,
-        frameon=False, labelcolor=cfg.TEXT, fontsize=12,
+        frameon=False, labelcolor=cfg.TEXT, fontsize=cfg.WEB_FONT_REGULAR_PX,
         handlelength=2.0, borderaxespad=0,
     )
     style_legend.set_in_layout(True)
 
     for ax in axes[:-1]:
         ax.tick_params(labelbottom=False)
-    axes[-1].set_xlabel("Time (UTC)", color=cfg.TEXT, fontsize=12)
+    axes[-1].set_xlabel("Time (UTC)", color=cfg.TEXT, fontsize=cfg.WEB_FONT_REGULAR_PX)
     axes[-1].xaxis.set_label_coords(0.47, -0.19)
 

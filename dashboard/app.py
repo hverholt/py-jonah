@@ -15,7 +15,7 @@ from . import export
 from .plots import overview
 
 
-def update_dashboard(view, ds, filename, wind_state, now):
+def update_dashboard(view, ds, wind_state, now):
     """Prepare observations and redraw the Overview page."""
     times = pd.to_datetime(ds["TIME"].values, utc=True)
     if len(times) == 0:
@@ -46,7 +46,6 @@ def update_dashboard(view, ds, filename, wind_state, now):
         now=now,
         visible=visible,
         wind_state=wind_state,
-        filename=filename,
         last_data_time=last_data_time,
         status=status,
     )
@@ -70,7 +69,7 @@ def refresh(view, export_dir, cached=None):
 
     try:
         ds, filename = data.load_data()
-        update_dashboard(view, ds, filename, wind_state, now)
+        update_dashboard(view, ds, wind_state, now)
         cached = (ds, filename)
         print(f"[{data.format_time(now)}] Dashboard refreshed: {filename}")
 
@@ -80,7 +79,7 @@ def refresh(view, export_dir, cached=None):
 
         if cached is not None:
             try:
-                update_dashboard(view, cached[0], cached[1], wind_state, now)
+                update_dashboard(view, cached[0], wind_state, now)
             except Exception:
                 traceback.print_exc()
 

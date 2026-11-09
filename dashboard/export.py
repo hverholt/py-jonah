@@ -44,23 +44,11 @@ def _timeseries_svgs(fig):
     and labels correctly proportioned while filling wide panels.
     """
     original_size = fig.get_size_inches().copy()
-    # Nine widths spanning the original 10.5–17.5-inch range.
-    # Keep these names in sync with the @container rules in web/style.css.
-    variants = (
-        ("size-1", 10.500),
-        ("size-2", 11.375),
-        ("size-3", 12.250),
-        ("size-4", 13.125),
-        ("size-5", 14.000),
-        ("size-6", 14.875),
-        ("size-7", 15.750),
-        ("size-8", 16.625),
-        ("size-9", 17.500),
-    )
+    variants = enumerate(cfg.TIMESERIES_EXPORT_WIDTHS, start=1)
     try:
         return "".join(
-            _render_timeseries_width(fig, width, name, original_size[1])
-            for name, width in variants
+            _render_timeseries_width(fig, width, f"size-{i}", original_size[1])
+            for i, width in variants
         )
     finally:
         fig.set_size_inches(original_size, forward=False)
@@ -71,6 +59,23 @@ def _render_timeseries_width(fig, width, name, height):
     return _svg(fig, f"timeseries-variant timeseries-{name}")
 
 
+def _timeseries_variant_css(height):
+    """Select the closest pre-rendered time-series width for each panel shape."""
+    widths = cfg.TIMESERIES_EXPORT_WIDTHS
+    rules = [
+        ".timeseries-plot > .timeseries-variant { display: none; }",
+        ".timeseries-plot > .timeseries-size-1 { display: block; }",
+    ]
+    for i in range(1, len(widths)):
+        threshold = (widths[i - 1] + widths[i]) / (2 * height)
+        rules.append(
+            f"@container (min-aspect-ratio: {threshold:.3f}) {{ "
+            f".timeseries-plot > .timeseries-size-{i} {{ display: none; }} "
+            f".timeseries-plot > .timeseries-size-{i + 1} {{ display: block; }} }}"
+        )
+    return "\n".join(rules)
+
+
 
 def _logo_tag():
     path = Path(cfg.LOGO_SVG)
@@ -78,6 +83,14 @@ def _logo_tag():
         return '<span class="footer-wordmark">RÖST</span>'
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     return f'<img class="footer-logo" alt="Röst" src="data:image/svg+xml;base64,{encoded}">'
+
+
+def _favicon_url():
+    path = Path(cfg.FAVICON_SVG)
+    if not path.is_file():
+        return ""
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
 
 
 def _escape(value):
@@ -146,10 +159,11 @@ def _html_page(view):
     js = (WEB_DIR / "pages.js").read_text(encoding="utf-8")
     colors = {
         "bg": cfg.BG, "panel": cfg.PANEL, "grid": cfg.GRID,
-        "text": cfg.TEXT, "muted": cfg.MUTED, "cyan": cfg.CYAN,
-        "green": cfg.GREEN, "orange": cfg.ORANGE, "red": cfg.RED,
+        "text": cfg.TEXT, "muted": cfg.MUTED,
         "font": f'"{cfg.FONT_FAMILY}"',
         "font-fallback": f'"{cfg.FONT_FALLBACK}"',
+        "font-regular": f"{cfg.WEB_FONT_REGULAR_PX}px",
+        "font-heading": f"{cfg.WEB_FONT_HEADING_PX}px",
     }
     theme = ':root {\n' + ''.join(f'--{name}: {value};\n' for name, value in colors.items()) + '}\n'
     status = view.get("status", {})
@@ -160,7 +174,9 @@ def _html_page(view):
         '__SVG_PROFILES__': _profile_html(view, 'velocity'),
         '__SVG_AMPLITUDE__': _profile_html(view, 'amplitude'),
         '__DASHBOARD_VERSION__': str(time.time_ns()),
-        '__INLINE_STYLE__': theme + css,
+        '__INLINE_STYLE__': theme + css + "\n" + _timeseries_variant_css(
+            view['figures']['timeseries'].get_size_inches()[1]
+        ),
         '__INLINE_SCRIPT__': js.replace('__WEB_POLL_MS__', str(cfg.WEB_POLL_SECONDS * 1000)),
         '__SVG_TIMESERIES__': _timeseries_svgs(view['figures']['timeseries']),
         '__SVG_POLAR__': _svg(view['figures']['polar']),
@@ -173,6 +189,7 @@ def _html_page(view):
         '__MEASUREMENTS__': _measurements_html(view),
         '__POLAR_LEGEND__': _polar_legend_html(),
         '__LOGO__': _logo_tag(),
+        '__FAVICON__': _favicon_url(),
         '__MAINTAINER__': _escape(cfg.MAINTAINER_NAME),
         '__MAINTAINER_EMAIL__': _escape(cfg.MAINTAINER_EMAIL),
     }

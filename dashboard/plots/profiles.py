@@ -3,7 +3,6 @@
 import datetime as dt
 import math
 import warnings
-
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from matplotlib.collections import QuadMesh
@@ -12,22 +11,6 @@ import pandas as pd
 import xarray as xr
 
 from .. import config as cfg
-
-
-CORR_THRESHOLD = None
-Y_MODE = "range"  # "range" (m above instrument) or "cell" (cell number)
-MAX_TIME_SAMPLES = 360
-
-PLOT_SETTINGS = {
-    "velocity": {
-        "clim": (-0.15, 0.15),
-        "cmap": "seismic",
-    },
-    "amplitude": {
-        "clim": (40, 85),
-        "cmap": "viridis",
-    },
-}
 
 
 def create_figure(ds, plot_type="velocity", now=None):
@@ -47,12 +30,12 @@ def create_figure(ds, plot_type="velocity", now=None):
     matplotlib.figure.Figure
         Profile figure.
     """
-    if plot_type not in PLOT_SETTINGS:
+    if plot_type not in cfg.PROFILE_PLOT_SETTINGS:
         raise ValueError(f"Unsupported profile type: {plot_type!r}")
     if ds is None or "TIME" not in ds:
         raise ValueError("No ADCP dataset is available")
 
-    settings = PLOT_SETTINGS[plot_type]
+    settings = cfg.PROFILE_PLOT_SETTINGS[plot_type]
     times = pd.to_datetime(ds["TIME"].values, utc=True)
     stop = pd.Timestamp(now if now is not None else dt.datetime.now(dt.timezone.utc))
     if stop.tzinfo is None:
@@ -63,12 +46,12 @@ def create_figure(ds, plot_type="velocity", now=None):
         raise ValueError(f"No {plot_type} observations in the last {cfg.HISTORY_HOURS} hours")
 
     indices = indices[np.argsort(times[indices])]
-    step = max(1, math.ceil(indices.size / MAX_TIME_SAMPLES))
+    step = max(1, math.ceil(indices.size / cfg.PROFILE_MAX_TIME_SAMPLES))
     if step > 1:
         indices = np.unique(np.r_[indices[::step], indices[-1]])
     selected = ds.isel(TIME=indices)
 
-    if Y_MODE == "range" and "CP" in selected and "TIME" not in selected["CP"].dims:
+    if cfg.PROFILE_Y_MODE == "range" and "CP" in selected and "TIME" not in selected["CP"].dims:
         cp = xr.broadcast(selected["TIME"], selected["CP"])[1]
         selected = selected.assign(CP=cp.transpose("TIME", "CN"))
 
@@ -90,12 +73,12 @@ def create_figure(ds, plot_type="velocity", now=None):
                 selected,
                 plot_type=plot_type,
                 x_mode="time",
-                y_mode=Y_MODE,
+                y_mode=cfg.PROFILE_Y_MODE,
                 subplot_indices=components,
                 cmap=settings["cmap"],
                 clim=settings["clim"],
                 corr_threshold=(
-                    CORR_THRESHOLD
+                    cfg.PROFILE_CORR_THRESHOLD
                     if plot_type == "velocity" and all(f"C{i}" in selected for i in range(1, 5))
                     else None
                 ),
@@ -114,7 +97,7 @@ def create_figure(ds, plot_type="velocity", now=None):
                 spine.set_linewidth(0.8)
 
         profile_times = times[indices].to_pydatetime()
-        if Y_MODE == "range":
+        if cfg.PROFILE_Y_MODE == "range":
             water_depth = (
                 np.asarray(selected["P"].values, dtype=float).ravel()
                 / cfg.DBAR_PER_METER
@@ -122,7 +105,7 @@ def create_figure(ds, plot_type="velocity", now=None):
 
         for ax in fig.axes[:len(components)]:
             ax.set_xlim(profile_times[0], profile_times[-1])
-            if Y_MODE == "range":
+            if cfg.PROFILE_Y_MODE == "range":
                 ax.fill_between(
                     profile_times,
                     water_depth,

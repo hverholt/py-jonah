@@ -12,17 +12,32 @@ TXT_FILE = str(ROOT / "data" / "interim" / "latest.txt")
 NC_FILE = str(ROOT / "data" / "processed" / "latest.nc")
 WIND_HISTORY_FILE = str(ROOT / "data" / "processed" / "wind_history.csv")
 
-# Dashboard output
+# Dashboard output and typography
 EXPORT_DIR = ROOT / "output"
 FONT_FAMILY = "DejaVu Sans"
 FONT_FALLBACK = "Arial"
+WEB_FONT_REGULAR_PX = 12
+WEB_FONT_HEADING_PX = 17
+
+# Overview figures and responsive time-series exports
+TIMESERIES_EXPORT_WIDTHS = (10.5, 11.375, 12.25, 13.125, 14.0, 14.875, 15.75, 16.625, 17.5)
+TIMESERIES_FIGURE_HEIGHT = 8.0
+POLAR_FIGURE_SIZE = (5.8, 5.8)
+
+# Time–range profiles
+PROFILE_Y_MODE = "range"  # "range" (m above instrument) or "cell" (cell number)
+PROFILE_MAX_TIME_SAMPLES = 360
+PROFILE_CORR_THRESHOLD = None
+PROFILE_PLOT_SETTINGS = {
+    "velocity": {"clim": (-0.15, 0.15), "cmap": "seismic"},
+    "amplitude": {"clim": (40, 85), "cmap": "viridis"},
+}
 
 # Attribution and logo
 MAINTAINER_NAME = "Sindri Bernholt"
 MAINTAINER_EMAIL = "sindri@rostrannsoknir.is"
+FAVICON_SVG = str(ROOT / "assets" / "logos" / "rost-logo-no-text-50px-green.svg")
 LOGO_SVG = str(ROOT / "assets" / "logos" / "rost-logo-icelandic-white.svg")
-LOGO_POSITION = (0.67, 0.975)
-LOGO_SIZE = 0.16
 
 # ADCP measurements
 TARGET_DEPTHS = (2, 5, 10)  # metres below surface
@@ -37,7 +52,6 @@ REFRESH_SECONDS = 60
 WEB_POLL_SECONDS = 15
 DIRECTION_WRAP_THRESHOLD = 200  # degrees
 RUNNING_MEAN_SAMPLES = 10
-RAW_LINE_ALPHA = 0.35
 MIN_DIRECTION_SPEED = 0.01  # m/s
 MAX_CURRENT_GAP_FACTOR = 2.5
 
@@ -54,14 +68,22 @@ WEATHER_STATION_NAME = "Þyrill"
 
 # Wind display
 WIND_MAX_AGE = 30
+
+# Plot colors and settings
 WIND_ARROW_LENGTH = 0.32
 WIND_COLOR = "#ffffff"
 WIND_PLOT_ALPHA = 0.9
+WIND_PLOT_LW = 1.4
+RAW_LINE_ALPHA = 0.35
+RAW_LINE_LW = 1.3
+MEAN_LINE_LW = 1.5
+DEPTH_PLOT_LW = 1.35
 
 # ADCP location and basemap
 MAP_LAT = 64.393931
 MAP_LON = -21.466464
 MAP_WIDTH = 400              # metres
+MAP_IMAGE_RESOLUTION = 1000   # pixels per side
 MAP_OPACITY = 0.8
 WMS_URL = "https://gis.natt.is/mapcache/web-mercator/wms"
 WMS_LAYERS = ["LMI_Island_einfalt"]

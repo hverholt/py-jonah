@@ -1,7 +1,5 @@
 * { box-sizing: border-box; }
 :root {
-  --font-regular: 12px;
-  --font-heading: 17px;
   --plot-surface: color-mix(in srgb, var(--panel) 45%, var(--bg));
 }
 
@@ -101,41 +99,6 @@ body { display: flex; min-height: 100dvh; font-family: var(--font), var(--font-f
   min-width: 0;
   min-height: 0;
 }
-.timeseries-plot > .timeseries-variant { display: none; }
-.timeseries-plot > .timeseries-size-1 { display: block; }
-/* Nine cached figures; select by the plot container's width/height ratio. */
-@container (min-aspect-ratio: 1.367) {
-  .timeseries-plot > .timeseries-size-1 { display: none; }
-  .timeseries-plot > .timeseries-size-2 { display: block; }
-}
-@container (min-aspect-ratio: 1.477) {
-  .timeseries-plot > .timeseries-size-2 { display: none; }
-  .timeseries-plot > .timeseries-size-3 { display: block; }
-}
-@container (min-aspect-ratio: 1.586) {
-  .timeseries-plot > .timeseries-size-3 { display: none; }
-  .timeseries-plot > .timeseries-size-4 { display: block; }
-}
-@container (min-aspect-ratio: 1.695) {
-  .timeseries-plot > .timeseries-size-4 { display: none; }
-  .timeseries-plot > .timeseries-size-5 { display: block; }
-}
-@container (min-aspect-ratio: 1.805) {
-  .timeseries-plot > .timeseries-size-5 { display: none; }
-  .timeseries-plot > .timeseries-size-6 { display: block; }
-}
-@container (min-aspect-ratio: 1.914) {
-  .timeseries-plot > .timeseries-size-6 { display: none; }
-  .timeseries-plot > .timeseries-size-7 { display: block; }
-}
-@container (min-aspect-ratio: 2.023) {
-  .timeseries-plot > .timeseries-size-7 { display: none; }
-  .timeseries-plot > .timeseries-size-8 { display: block; }
-}
-@container (min-aspect-ratio: 2.133) {
-  .timeseries-plot > .timeseries-size-8 { display: none; }
-  .timeseries-plot > .timeseries-size-9 { display: block; }
-}
 .right-stack { display: grid; min-width: 0; min-height: 0; grid-template-rows: max-content minmax(0, 1fr); gap: 20px; }
 /* The readings retain a subtle surface like the original numerical panel. */
 .measurements-panel { min-width: 0; padding: 14px 16px; background: var(--plot-surface); border-radius: 9px; }
@@ -145,7 +108,6 @@ body { display: flex; min-height: 100dvh; font-family: var(--font), var(--font-f
 .measurement-name { color: var(--text); font-weight: 500; }
 .measurement-value { color: var(--text); font-size: var(--font-regular); font-variant-numeric: tabular-nums; font-weight: 400; white-space: nowrap; }
 .measurement-depth { border-top: 1px solid var(--grid); padding-top: 10px; }
-.measurement-depth .measurement-value { font-weight: 400; }
 .measurement-wind { border-top: 1px solid var(--grid); padding-top: 10px; }
 .measurement-wind .measurement-name { min-width: 0; }
 
@@ -158,7 +120,6 @@ body { display: flex; min-height: 100dvh; font-family: var(--font), var(--font-f
 .legend-arrow { display: inline-block; width: 25px; height: 0; position: relative; border-top: 2px solid currentColor; flex: 0 0 25px; }
 .legend-arrow::after { content: ""; position: absolute; right: -1px; top: -5px; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 7px solid currentColor; }
 .legend-wind { border-top-style: dashed; }
-.wind-readout { color: var(--muted); text-align: center; font-size: var(--font-regular); line-height: 1.5; margin: 0; }
 
 /* Brand stays at the bottom of the sidebar rather than the plot area. */
 .sidebar-brand {
@@ -200,7 +161,6 @@ body { display: flex; min-height: 100dvh; font-family: var(--font), var(--font-f
   .sidebar-brand { order: 2; margin-top: 0; padding: 20px 20px 24px; }
   .nav-link { font-size: var(--font-regular); padding: 6px 0; }
   .dashboard { padding: 16px 10px; gap: 12px; }
-  .dashboard-heading h1 { font-size: var(--font-heading); }
   .status-times { gap: 10px 15px; }
   .dashboard-grid { gap: 20px; }
   .timeseries-panel { height: 600px; min-height: 0; overflow-x: auto; overflow-y: hidden; }
@@ -210,8 +170,7 @@ body { display: flex; min-height: 100dvh; font-family: var(--font), var(--font-f
   .polar-panel { height: clamp(300px, 88vw, 420px); min-height: 0; padding-block: 6px; }
   .measurements-panel { padding: 12px 14px; }
   .polar-row { gap: 2px; }
-  .polar-legend { flex-basis: 74px; font-size: var(--font-regular); gap: 6px; }
-  .wind-readout { font-size: var(--font-regular); }
+  .polar-legend { flex-basis: 74px; gap: 6px; }
 }
 
 /* Plot text uses the same CSS-pixel sizes as the surrounding HTML.
@@ -221,9 +180,6 @@ body { display: flex; min-height: 100dvh; font-family: var(--font), var(--font-f
 .profiles-chart svg text {
   font-family: var(--font), var(--font-fallback), sans-serif !important;
   font-size: var(--svg-font-regular, 11.2px) !important;
-}
-.polar-plot svg text.svg-heading {
-  font-size: var(--svg-font-heading, 16.8px) !important;
 }
 
 /* Velocity profiles */
