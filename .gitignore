@@ -4,4 +4,4 @@ __pycache__/
 .pytest_cache/
 .venv/
 latest.*
-data/processed/wind_history.csv
+data/
