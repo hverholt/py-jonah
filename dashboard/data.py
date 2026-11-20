@@ -201,10 +201,13 @@ def get_data_status(last_data_time, now):
     if age < -60:
         return "CLOCK ERROR", cfg.RED, age
 
-    if age <= cfg.STALE_AFTER_SECONDS:
+    if age < cfg.STALE_AFTER_SECONDS:
         return "LIVE", cfg.GREEN, age
 
-    return "STALE", cfg.ORANGE, age
+    if age < cfg.OFFLINE_AFTER_SECONDS:
+        return "STALE", cfg.ORANGE, age
+
+    return "OFFLINE", cfg.RED, age
 
 
 

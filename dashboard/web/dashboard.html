@@ -36,7 +36,11 @@ __INLINE_STYLE__
             <p class="dashboard-subheading">Live current monitor</p>
           </div>
           <div class="dashboard-status" aria-label="Data status and refresh times">
-            <div class="status-state"><span class="status-dot" style="background: __STATUS_COLOR__"></span><strong style="color: __STATUS_COLOR__">__STATUS_STATE__</strong><span class="status-age">__STATUS_AGE__</span></div>
+            <div class="status-state" style="color: __STATUS_COLOR__">
+              <span class="status-dot" aria-hidden="true"></span>
+              <strong>__STATUS_STATE__</strong>
+              <span class="status-age">__STATUS_AGE__</span>
+            </div>
             <dl class="status-times">
               <div><dt>Last data point</dt><dd>__LAST_DATA__</dd></div>
               <div><dt>Last refresh</dt><dd>__LAST_REFRESH__</dd></div>

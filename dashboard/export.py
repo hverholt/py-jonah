@@ -161,6 +161,19 @@ def _profile_html(view, plot_type="velocity"):
             plt.close(fig)
 
 
+def _format_age(age):
+    if age is None:
+        return ""
+    seconds = max(0, int(age))
+    if seconds < cfg.AGE_MINUTES_FROM_SECONDS:
+        return f"{seconds} s old"
+    if seconds < cfg.AGE_HOURS_FROM_SECONDS:
+        return f"{seconds // 60} min old"
+    if seconds < cfg.AGE_DAYS_FROM_SECONDS:
+        return f"{seconds // 3600} h old"
+    return f"{seconds // 86400} d old"
+
+
 def _html_page(view, plot_paths, version):
     doc = (WEB_DIR / "dashboard.html").read_text(encoding="utf-8")
     css = (WEB_DIR / "style.css").read_text(encoding="utf-8")
@@ -171,13 +184,14 @@ def _html_page(view, plot_paths, version):
         "font": f'"{cfg.FONT_FAMILY}"',
         "font-fallback": f'"{cfg.FONT_FALLBACK}"',
         "font-regular": f"{cfg.WEB_FONT_REGULAR_PX}px",
+        "status-font": f"{cfg.STATUS_FONT_PX}px",
+        "status-offset": f"{cfg.STATUS_LEFT_OFFSET_PX}px",
         "font-heading": f"{cfg.WEB_FONT_HEADING_PX}px",
     }
     theme = ':root {\n' + ''.join(f'--{name}: {value};\n' for name, value in colors.items()) + '}\n'
     status = view.get("status", {})
     state = status.get("state", "INITIALIZING")
-    age = status.get("age")
-    age_text = f"{age:.0f} s old" if age is not None else ""
+    age_text = _format_age(status.get("age"))
     substitutions = {
         '__PLOT_POLAR__': plot_paths['polar'],
         '__PLOT_TIMESERIES__': plot_paths['timeseries'],

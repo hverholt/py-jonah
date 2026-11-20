@@ -37,8 +37,10 @@ def update_dashboard(view, ds, wind_state, now, *, cached_data=False):
     status = data.get_data_status(last_data_time, now)
 
     if cached_data:
-        state, _, age = status
-        status = (f"{state}  |  Update failed; showing last data", cfg.ORANGE, age)
+        state, color, age = status
+        if state == "LIVE":
+            color = cfg.ORANGE
+        status = (f"{state}  |  Update failed; showing last data", color, age)
 
     view["profile_dataset"] = ds
     

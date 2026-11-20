@@ -46,20 +46,24 @@ body { display: flex; min-height: 100dvh; font-family: var(--font), var(--font-f
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  gap: clamp(14px, 1.5vw, 28px);
+  gap: calc(clamp(14px, 1.5vw, 28px) + var(--status-offset));
 }
 .status-state {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--font-heading);
-  white-space: nowrap;
+  font-size: var(--status-font);
+  font-weight: 700;
+  flex-wrap: wrap;
 }
-.status-age {
-  font-size: var(--font-heading);
-  color: var(--muted);
+.status-state strong { font-weight: inherit; }
+.status-age { white-space: nowrap; }
+.status-age:empty { display: none; }
+.status-age:not(:empty)::before {
+  content: "|";
+  margin-inline-end: 8px;
 }
-.status-dot { display: inline-block; flex: 0 0 9px; height: 9px; width: 9px; border-radius: 50%; }
+.status-dot { background: currentColor; display: inline-block; flex: 0 0 9px; height: 9px; width: 9px; border-radius: 50%; }
 .status-times { display: flex; flex-wrap: wrap; gap: 9px 19px; margin: 0; justify-content: flex-end; }
 .status-times > div { display: flex; flex-direction: column; gap: 3px; }
 .status-times dt { font-size: var(--font-regular); color: var(--muted); }
