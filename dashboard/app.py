@@ -15,7 +15,7 @@ from . import export
 from .plots import overview
 
 
-def update_dashboard(view, ds, wind_state, now):
+def update_dashboard(view, ds, wind_state, now, *, cached_data=False):
     """Prepare observations and redraw the Overview page."""
     times = pd.to_datetime(ds["TIME"].values, utc=True)
     if len(times) == 0:
@@ -35,6 +35,10 @@ def update_dashboard(view, ds, wind_state, now):
 
     currents, water_depth = data.extract_velocity(ds)
     status = data.get_data_status(last_data_time, now)
+
+    if cached_data:
+        state, _, age = status
+        status = (f"{state}  |  Update failed; showing last data", cfg.ORANGE, age)
 
     view["profile_dataset"] = ds
     
@@ -77,13 +81,17 @@ def refresh(view, export_dir, cached=None):
         print(f"Refresh failed: {exc}")
         traceback.print_exc()
 
-        if cached is not None:
+        if cached is None:
             try:
-                update_dashboard(view, cached[0], wind_state, now)
-            except Exception:
-                traceback.print_exc()
-
-        overview.show_error(view, str(exc))
+                cached = (data.read_dashboard_dataset(cfg.NC_FILE), str(cfg.NC_FILE))
+            except Exception as cache_error:
+                print(f"No usable saved dashboard dataset: {cache_error}")
+                return None  # Keep any previously published dashboard.
+        try:
+            update_dashboard(view, cached[0], wind_state, now, cached_data=True)
+        except Exception:
+            traceback.print_exc()
+            return cached  # Avoid exporting a partially redrawn view.
 
     # Export failures should not interrupt acquisition or later refreshes.
     try:

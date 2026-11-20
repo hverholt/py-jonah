@@ -2,7 +2,8 @@
 import datetime as dt
 import glob
 import os
-import shutil
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 import time
 
 import numpy as np
@@ -40,31 +41,32 @@ def load_data():
     # Get all recent telemetry files (within specified interval + 1 hour buffer)
     source_files = get_recent_files(hours=cfg.HISTORY_HOURS + 1)
 
-    os.makedirs(os.path.dirname(cfg.TXT_FILE), exist_ok=True)
-    os.makedirs(os.path.dirname(cfg.NC_FILE), exist_ok=True)
+    txt = Path(cfg.TXT_FILE)
+    nc = Path(cfg.NC_FILE)
+    for path in (txt, nc):
+        path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Combine all recent telemetry files into one file "latest.txt"
-    temp_file = cfg.TXT_FILE + ".tmp"
-
-    with open(temp_file, "wb") as dest:
-        for source_file in source_files:
-            with open(source_file, "rb") as src:
-                shutil.copyfileobj(src, dest)
-
-            dest.write(b"\n")
-
-    os.replace(temp_file, cfg.TXT_FILE)
-
-    # Convert combined telemetry to NetCDF
-    telemetry2netcdf.telemetry_to_netcdf(
-        cfg.TXT_FILE,
-        cfg.NC_FILE,
-        102,
-        filter_errors=True,
-    )
-
-    with xr.open_dataset(cfg.NC_FILE) as ds:
-        ds = ds.load()
+    with NamedTemporaryFile(dir=txt.parent, delete=False) as temp:
+        snapshot = Path(temp.name)
+    with NamedTemporaryFile(dir=nc.parent, suffix=".nc", delete=False) as temp:
+        candidate = Path(temp.name)
+    try:
+        with snapshot.open("wb") as dest:
+            for source_file in source_files:
+                with open(source_file, "rb") as src:
+                    for line in src:
+                        if line.endswith((b"\r", b"\n")):
+                            dest.write(line)
+                        elif source_file != source_files[-1]:
+                            dest.write(line + b"\n")
+                        # Re-read the active file's unfinished tail next refresh.
+        telemetry2netcdf.telemetry_to_netcdf(snapshot, candidate, 102, filter_errors=True)
+        ds = read_dashboard_dataset(candidate)
+        os.replace(snapshot, txt)
+        os.replace(candidate, nc)
+    finally:
+        snapshot.unlink(missing_ok=True)
+        candidate.unlink(missing_ok=True)
 
     filename = (
         f"{len(source_files)} files "
@@ -73,6 +75,17 @@ def load_data():
 
     return ds, filename
 
+
+
+def read_dashboard_dataset(path):
+    """Load and close the file before Windows replaces it."""
+    with xr.open_dataset(path) as source:
+        if not source.sizes.get("TIME") or not source.sizes.get("CN"):
+            raise ValueError("No dashboard observations in telemetry.")
+        for name in ("VN", "VE", "CP", "P"):
+            if name not in source:
+                raise ValueError(f"Missing dashboard variable {name}")
+        return source.load()
 
 
 # Velocity extraction
